@@ -109,3 +109,4 @@ pytest --cov=. --cov-report=term-missing
 ## Links
 
 - [Release Notes](RELEASE-NOTES.md)
+- [Contributing](CONTRIBUTING.md)
