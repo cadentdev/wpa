@@ -13,7 +13,7 @@ import markdown
 import requests
 from dotenv import load_dotenv
 
-__version__ = "0.2.0"
+__version__ = "0.2.1"
 
 VALID_STATUSES = {"draft", "publish", "pending", "private"}
 SITE_NAME_PATTERN = re.compile(r"^[a-zA-Z0-9][a-zA-Z0-9-]*$")
@@ -33,9 +33,7 @@ def list_sites():
     if not config_dir.exists():
         return []
     return sorted(
-        d.name
-        for d in config_dir.iterdir()
-        if d.is_dir() and (d / ".env").exists()
+        d.name for d in config_dir.iterdir() if d.is_dir() and (d / ".env").exists()
     )
 
 
@@ -55,14 +53,20 @@ def create_site_config(site_name=None):
         site_name = input("Site name: ").strip()
 
     if not validate_site_name(site_name):
-        print(f"Error: Invalid site name '{site_name}'. Use alphanumeric characters and hyphens only.")
+        print(
+            f"Error: Invalid site name '{site_name}'. Use alphanumeric characters and hyphens only."
+        )
         sys.exit(1)
 
     config_dir = get_config_dir()
     site_dir = config_dir / site_name
 
     if site_dir.exists() and (site_dir / ".env").exists():
-        confirm = input(f"Config '{site_name}' already exists. Overwrite? [y/N]: ").strip().lower()
+        confirm = (
+            input(f"Config '{site_name}' already exists. Overwrite? [y/N]: ")
+            .strip()
+            .lower()
+        )
         if confirm != "y":
             print("Cancelled.")
             sys.exit(0)
@@ -116,12 +120,16 @@ def migrate_repo_env():
         return None  # Already have XDG configs, don't offer migration
 
     print(f"Found repo-root config at {repo_env}")
-    site_name = input("Migrate to XDG config? Enter site name (or press Enter to skip): ").strip()
+    site_name = input(
+        "Migrate to XDG config? Enter site name (or press Enter to skip): "
+    ).strip()
     if not site_name:
         return None
 
     if not validate_site_name(site_name):
-        print(f"Error: Invalid site name '{site_name}'. Use alphanumeric characters and hyphens only.")
+        print(
+            f"Error: Invalid site name '{site_name}'. Use alphanumeric characters and hyphens only."
+        )
         return None
 
     config_dir = get_config_dir()
@@ -215,7 +223,9 @@ def _load_env(env_path):
     admin_path = os.environ.get("WP_ADMIN_PATH", "wp-admin")
 
     if not all([site_url, user, password]):
-        print(f"Error: WP_SITE_URL, WP_USER, and WP_APP_PASSWORD must all be set in {env_path}")
+        print(
+            f"Error: WP_SITE_URL, WP_USER, and WP_APP_PASSWORD must all be set in {env_path}"
+        )
         sys.exit(1)
 
     if not site_url.startswith("https://"):
@@ -232,7 +242,9 @@ def load_config(env_path):
     New code should use resolve_config() which returns 4-tuple with admin_path.
     """
     if not Path(env_path).exists():
-        print(f"Error: {env_path} not found. Copy .env.example to .env and fill in credentials.")
+        print(
+            f"Error: {env_path} not found. Copy .env.example to .env and fill in credentials."
+        )
         sys.exit(1)
 
     load_dotenv(env_path, override=True)
@@ -242,7 +254,9 @@ def load_config(env_path):
     password = os.environ.get("WP_APP_PASSWORD", "")
 
     if not all([site_url, user, password]):
-        print("Error: WP_SITE_URL, WP_USER, and WP_APP_PASSWORD must all be set in .env")
+        print(
+            "Error: WP_SITE_URL, WP_USER, and WP_APP_PASSWORD must all be set in .env"
+        )
         sys.exit(1)
 
     if not site_url.startswith("https://"):
@@ -270,7 +284,9 @@ def parse_page(filepath):
     status = post.get("status", "draft")
 
     if status not in VALID_STATUSES:
-        print(f"Error: Invalid status '{status}' in {filepath}. Must be one of: {', '.join(sorted(VALID_STATUSES))}")
+        print(
+            f"Error: Invalid status '{status}' in {filepath}. Must be one of: {', '.join(sorted(VALID_STATUSES))}"
+        )
         sys.exit(1)
 
     html_content = markdown.markdown(post.content)
@@ -278,7 +294,9 @@ def parse_page(filepath):
     return title, slug, status, html_content
 
 
-def publish_page(site_url, user, password, title, slug, status, content, admin_path="wp-admin"):
+def publish_page(
+    site_url, user, password, title, slug, status, content, admin_path="wp-admin"
+):
     """POST a page to WordPress REST API."""
     endpoint = f"{site_url}/wp-json/wp/v2/pages"
 
@@ -298,7 +316,9 @@ def publish_page(site_url, user, password, title, slug, status, content, admin_p
             timeout=30,
         )
     except requests.ConnectionError:
-        print(f"Error: Could not connect to {site_url}. Check the URL and your network connection.")
+        print(
+            f"Error: Could not connect to {site_url}. Check the URL and your network connection."
+        )
         return 1
     except requests.Timeout:
         print(f"Error: Request to {site_url} timed out after 30 seconds.")
@@ -311,7 +331,7 @@ def publish_page(site_url, user, password, title, slug, status, content, admin_p
         data = response.json()
         page_id = data["id"]
         edit_url = f"{site_url}/{admin_path}/post.php?post={page_id}&action=edit"
-        print(f"Page created successfully!")
+        print("Page created successfully!")
         print(f"  ID:       {page_id}")
         print(f"  Title:    {title}")
         print(f"  Status:   {status}")
@@ -331,11 +351,32 @@ def publish_page(site_url, user, password, title, slug, status, content, admin_p
 def main():
     parser = argparse.ArgumentParser(
         description="Publish markdown files as WordPress pages.",
+        epilog="""\
+examples:
+  %(prog)s pages/my-page.md              Publish using auto-detected site config
+  %(prog)s --site demo pages/my-page.md  Publish using the "demo" site config
+  %(prog)s --new-site                    Create a new site config interactively
+
+config:
+  Site configs are stored at ~/.config/wpa/<site-name>/.env
+  On first run with no configs, you will be prompted to create one.
+""",
+        formatter_class=argparse.RawDescriptionHelpFormatter,
     )
-    parser.add_argument("file", nargs="?", help="Path to markdown file with YAML frontmatter")
-    parser.add_argument("--site", help="Use named site config from ~/.config/wpa/<name>/")
-    parser.add_argument("--new-site", action="store_true", help="Create a new site config interactively")
-    parser.add_argument("--version", action="version", version=f"%(prog)s {__version__}")
+    parser.add_argument(
+        "file", nargs="?", help="Path to markdown file with YAML frontmatter"
+    )
+    parser.add_argument(
+        "--site", help="Use named site config from ~/.config/wpa/<name>/"
+    )
+    parser.add_argument(
+        "--new-site",
+        action="store_true",
+        help="Create a new site config interactively",
+    )
+    parser.add_argument(
+        "--version", action="version", version=f"%(prog)s {__version__}"
+    )
     args = parser.parse_args()
 
     if args.new_site:
@@ -349,7 +390,9 @@ def main():
     title, slug, status, content = parse_page(args.file)
 
     print(f"Publishing '{title}' as {status} to {site_url}...")
-    return publish_page(site_url, user, password, title, slug, status, content, admin_path=admin_path)
+    return publish_page(
+        site_url, user, password, title, slug, status, content, admin_path=admin_path
+    )
 
 
 if __name__ == "__main__":

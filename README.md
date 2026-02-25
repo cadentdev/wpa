@@ -101,4 +101,4 @@ pip install -r requirements-dev.txt
 pytest --cov=. --cov-report=term-missing
 ```
 
-69 tests | 99% coverage
+72 tests | 99% coverage

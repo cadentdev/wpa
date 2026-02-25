@@ -1,5 +1,25 @@
 # Release Notes
 
+## v0.2.1 — CI Pipeline and Improved CLI Help (2026-02-25)
+
+### What's New
+
+- **GitHub Actions CI** — Automated testing on push and PR: pytest with coverage, ruff lint, ruff format
+- **Improved CLI help** — `--help` now shows usage examples, config file location, and first-run guidance
+- **3 new tests** for CLI help output validation
+
+### Quality
+
+- 72 tests | 99% coverage
+- CI pipeline: pytest + ruff check + ruff format on Ubuntu / Python 3.12
+
+### Closes
+
+- #2 — CI pipeline
+- #5 — Improved CLI help
+
+---
+
 ## v0.2.0 — Interactive Site Config with XDG Storage (2026-02-25)
 
 ### What's New
