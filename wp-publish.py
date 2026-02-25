@@ -2,6 +2,7 @@
 """Publish markdown files as WordPress pages via REST API."""
 
 import argparse
+import os
 import sys
 from pathlib import Path
 
@@ -9,7 +10,8 @@ import frontmatter
 import markdown
 import requests
 from dotenv import load_dotenv
-import os
+
+VALID_STATUSES = {"draft", "publish", "pending", "private"}
 
 
 def load_config():
@@ -27,6 +29,10 @@ def load_config():
 
     if not all([site_url, user, password]):
         print("Error: WP_SITE_URL, WP_USER, and WP_APP_PASSWORD must all be set in .env")
+        sys.exit(1)
+
+    if not site_url.startswith("https://"):
+        print("Error: WP_SITE_URL must use HTTPS to protect credentials in transit.")
         sys.exit(1)
 
     return site_url.rstrip("/"), user, password
@@ -48,6 +54,11 @@ def parse_page(filepath):
 
     slug = post.get("slug", "")
     status = post.get("status", "draft")
+
+    if status not in VALID_STATUSES:
+        print(f"Error: Invalid status '{status}' in {filepath}. Must be one of: {', '.join(sorted(VALID_STATUSES))}")
+        sys.exit(1)
+
     html_content = markdown.markdown(post.content)
 
     return title, slug, status, html_content
@@ -65,12 +76,22 @@ def publish_page(site_url, user, password, title, slug, status, content):
     if slug:
         payload["slug"] = slug
 
-    response = requests.post(
-        endpoint,
-        json=payload,
-        auth=(user, password),
-        timeout=30,
-    )
+    try:
+        response = requests.post(
+            endpoint,
+            json=payload,
+            auth=(user, password),
+            timeout=30,
+        )
+    except requests.ConnectionError:
+        print(f"Error: Could not connect to {site_url}. Check the URL and your network connection.")
+        return 1
+    except requests.Timeout:
+        print(f"Error: Request to {site_url} timed out after 30 seconds.")
+        return 1
+    except requests.RequestException as e:
+        print(f"Error: Request failed: {e}")
+        return 1
 
     if response.status_code == 201:
         data = response.json()
