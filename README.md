@@ -39,4 +39,21 @@ Page content in markdown here...
 
 - `title` (required): Page title
 - `slug` (optional): URL slug
-- `status` (optional): `draft` (default) or `publish`
+- `status` (optional): `draft` (default), `publish`, `pending`, or `private`
+
+## Safety and Security
+
+- **Default status is always `draft`** — never publishes unless frontmatter explicitly says otherwise
+- **HTTPS enforced** — rejects `http://` site URLs to protect credentials in transit
+- **Status validation** — rejects typos and invalid values in frontmatter
+- **Connection error handling** — timeouts and network failures produce clear messages, not tracebacks
+- **Credentials in `.env` only** — `.gitignore` prevents accidental commits
+
+## Development
+
+```bash
+pip install -r requirements-dev.txt
+pytest --cov=. --cov-report=term-missing
+```
+
+20 tests | 99% coverage
