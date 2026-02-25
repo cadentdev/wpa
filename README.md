@@ -12,6 +12,8 @@ cp .env.example .env
 # Edit .env with your WordPress credentials
 ```
 
+The `.env` file must be in the same directory as `wp-publish.py` (the repo root). The script locates it relative to its own path, not the working directory.
+
 ### WordPress Application Password
 
 1. Log into wp-admin → Users → Your Profile
