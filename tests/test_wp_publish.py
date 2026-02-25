@@ -531,6 +531,9 @@ class TestCreateSiteConfig:
         assert "WP_APP_PASSWORD=secret-pass" in content
         assert "WP_ADMIN_PATH=wp-admin" in content
 
+    @pytest.mark.skipif(
+        sys.platform == "win32", reason="Unix file permissions not supported on Windows"
+    )
     def test_file_permissions_600(self, xdg_config, monkeypatch):
         """create_site_config sets .env file permissions to 600."""
         inputs = iter(["https://example.com", "user", ""])
@@ -928,6 +931,212 @@ class TestMigrateRepoEnv:
 
 
 # ---------------------------------------------------------------------------
+# is_private_url tests
+# ---------------------------------------------------------------------------
+
+
+class TestIsPrivateUrl:
+    """Test private/LAN address detection for HTTP allowance."""
+
+    # RFC 1918 Class C (192.168.0.0/16)
+    def test_192_168_is_private(self):
+        assert wp_publish.is_private_url("http://192.168.1.1") is True
+
+    def test_192_168_52_25_is_private(self):
+        assert wp_publish.is_private_url("http://192.168.52.25") is True
+
+    # RFC 1918 Class A (10.0.0.0/8)
+    def test_10_x_is_private(self):
+        assert wp_publish.is_private_url("http://10.0.0.1") is True
+
+    def test_10_10_1_1_is_private(self):
+        assert wp_publish.is_private_url("http://10.10.1.1") is True
+
+    # RFC 1918 Class B (172.16.0.0/12)
+    def test_172_16_is_private(self):
+        assert wp_publish.is_private_url("http://172.16.0.1") is True
+
+    def test_172_31_is_private(self):
+        assert wp_publish.is_private_url("http://172.31.255.255") is True
+
+    def test_172_15_is_not_private(self):
+        """172.15.x.x is NOT in the 172.16.0.0/12 range."""
+        assert wp_publish.is_private_url("http://172.15.0.1") is False
+
+    def test_172_32_is_not_private(self):
+        """172.32.x.x is NOT in the 172.16.0.0/12 range."""
+        assert wp_publish.is_private_url("http://172.32.0.1") is False
+
+    # Loopback (127.0.0.0/8)
+    def test_127_0_0_1_is_private(self):
+        assert wp_publish.is_private_url("http://127.0.0.1") is True
+
+    def test_127_x_is_private(self):
+        assert wp_publish.is_private_url("http://127.255.255.255") is True
+
+    # localhost hostname
+    def test_localhost_is_private(self):
+        assert wp_publish.is_private_url("http://localhost") is True
+
+    def test_localhost_with_port_is_private(self):
+        assert wp_publish.is_private_url("http://localhost:8080") is True
+
+    # Public addresses
+    def test_public_ip_is_not_private(self):
+        assert wp_publish.is_private_url("http://93.184.216.34") is False
+
+    def test_public_hostname_is_not_private(self):
+        assert wp_publish.is_private_url("http://example.com") is False
+
+    # HTTPS URLs (always valid, private check not relevant)
+    def test_https_private_ip_still_private(self):
+        assert wp_publish.is_private_url("https://192.168.1.1") is True
+
+    # URL with port
+    def test_private_ip_with_port(self):
+        assert wp_publish.is_private_url("http://192.168.52.25:8080") is True
+
+    def test_public_ip_with_port(self):
+        assert wp_publish.is_private_url("http://93.184.216.34:8080") is False
+
+
+# ---------------------------------------------------------------------------
+# URL validation in _load_env (HTTP on private addresses)
+# ---------------------------------------------------------------------------
+
+
+class TestLoadEnvPrivateHttp:
+    def test_http_private_ip_accepted(self, xdg_config, monkeypatch):
+        """_load_env accepts http:// for private IP addresses."""
+        site_dir = xdg_config / "wpa" / "test"
+        site_dir.mkdir(parents=True)
+        env = site_dir / ".env"
+        env.write_text(
+            "WP_SITE_URL=http://192.168.52.25\n"
+            "WP_USER=testuser\n"
+            "WP_APP_PASSWORD=testpass\n"
+        )
+        monkeypatch.delenv("WP_SITE_URL", raising=False)
+        monkeypatch.delenv("WP_USER", raising=False)
+        monkeypatch.delenv("WP_APP_PASSWORD", raising=False)
+        monkeypatch.delenv("WP_ADMIN_PATH", raising=False)
+
+        site_url, user, password, admin_path = wp_publish._load_env(env)
+        assert site_url == "http://192.168.52.25"
+
+    def test_http_private_ip_prints_warning(self, xdg_config, monkeypatch, capsys):
+        """_load_env prints warning when HTTP used on private address."""
+        site_dir = xdg_config / "wpa" / "test"
+        site_dir.mkdir(parents=True)
+        env = site_dir / ".env"
+        env.write_text(
+            "WP_SITE_URL=http://192.168.52.25\n"
+            "WP_USER=testuser\n"
+            "WP_APP_PASSWORD=testpass\n"
+        )
+        monkeypatch.delenv("WP_SITE_URL", raising=False)
+        monkeypatch.delenv("WP_USER", raising=False)
+        monkeypatch.delenv("WP_APP_PASSWORD", raising=False)
+        monkeypatch.delenv("WP_ADMIN_PATH", raising=False)
+
+        wp_publish._load_env(env)
+        output = capsys.readouterr().out
+        assert "Warning" in output
+        assert "not encrypted" in output.lower() or "HTTP" in output
+
+    def test_http_localhost_accepted(self, xdg_config, monkeypatch):
+        """_load_env accepts http://localhost."""
+        site_dir = xdg_config / "wpa" / "test"
+        site_dir.mkdir(parents=True)
+        env = site_dir / ".env"
+        env.write_text(
+            "WP_SITE_URL=http://localhost:8080\n"
+            "WP_USER=testuser\n"
+            "WP_APP_PASSWORD=testpass\n"
+        )
+        monkeypatch.delenv("WP_SITE_URL", raising=False)
+        monkeypatch.delenv("WP_USER", raising=False)
+        monkeypatch.delenv("WP_APP_PASSWORD", raising=False)
+        monkeypatch.delenv("WP_ADMIN_PATH", raising=False)
+
+        site_url, _, _, _ = wp_publish._load_env(env)
+        assert site_url == "http://localhost:8080"
+
+    def test_http_public_ip_rejected(self, xdg_config, monkeypatch):
+        """_load_env rejects http:// for public IP addresses."""
+        site_dir = xdg_config / "wpa" / "test"
+        site_dir.mkdir(parents=True)
+        env = site_dir / ".env"
+        env.write_text(
+            "WP_SITE_URL=http://93.184.216.34\n"
+            "WP_USER=testuser\n"
+            "WP_APP_PASSWORD=testpass\n"
+        )
+        monkeypatch.delenv("WP_SITE_URL", raising=False)
+        monkeypatch.delenv("WP_USER", raising=False)
+        monkeypatch.delenv("WP_APP_PASSWORD", raising=False)
+
+        with pytest.raises(SystemExit) as exc_info:
+            wp_publish._load_env(env)
+        assert exc_info.value.code == 1
+
+    def test_http_public_hostname_rejected(self, xdg_config, monkeypatch):
+        """_load_env rejects http:// for public hostnames."""
+        site_dir = xdg_config / "wpa" / "test"
+        site_dir.mkdir(parents=True)
+        env = site_dir / ".env"
+        env.write_text(
+            "WP_SITE_URL=http://example.com\n"
+            "WP_USER=testuser\n"
+            "WP_APP_PASSWORD=testpass\n"
+        )
+        monkeypatch.delenv("WP_SITE_URL", raising=False)
+        monkeypatch.delenv("WP_USER", raising=False)
+        monkeypatch.delenv("WP_APP_PASSWORD", raising=False)
+
+        with pytest.raises(SystemExit) as exc_info:
+            wp_publish._load_env(env)
+        assert exc_info.value.code == 1
+
+
+# ---------------------------------------------------------------------------
+# create_site_config HTTP on private addresses
+# ---------------------------------------------------------------------------
+
+
+class TestCreateSiteConfigPrivateHttp:
+    def test_http_private_accepted(self, xdg_config, monkeypatch):
+        """create_site_config accepts http:// for private IP addresses."""
+        inputs = iter(["http://192.168.52.25", "user", ""])
+        monkeypatch.setattr("builtins.input", lambda prompt: next(inputs))
+        monkeypatch.setattr("getpass.getpass", lambda prompt: "pass")
+
+        env_path = wp_publish.create_site_config(site_name="local")
+        content = env_path.read_text()
+        assert "http://192.168.52.25" in content
+
+    def test_http_public_rejected_then_https_accepted(self, xdg_config, monkeypatch):
+        """create_site_config rejects http:// public, then accepts https://."""
+        inputs = iter(["http://example.com", "https://example.com", "user", ""])
+        monkeypatch.setattr("builtins.input", lambda prompt: next(inputs))
+        monkeypatch.setattr("getpass.getpass", lambda prompt: "pass")
+
+        env_path = wp_publish.create_site_config(site_name="test")
+        content = env_path.read_text()
+        assert "https://example.com" in content
+
+    def test_http_localhost_accepted(self, xdg_config, monkeypatch):
+        """create_site_config accepts http://localhost."""
+        inputs = iter(["http://localhost:8080", "user", ""])
+        monkeypatch.setattr("builtins.input", lambda prompt: next(inputs))
+        monkeypatch.setattr("getpass.getpass", lambda prompt: "pass")
+
+        env_path = wp_publish.create_site_config(site_name="local")
+        content = env_path.read_text()
+        assert "http://localhost:8080" in content
+
+
+# ---------------------------------------------------------------------------
 # main integration tests
 # ---------------------------------------------------------------------------
 
@@ -978,7 +1187,7 @@ class TestMain:
             wp_publish.main()
         assert exc_info.value.code == 0
         output = capsys.readouterr().out
-        assert "0.2.1" in output
+        assert "0.3.0" in output
 
     def test_help_includes_examples(self, monkeypatch, capsys):
         """--help output includes usage examples."""

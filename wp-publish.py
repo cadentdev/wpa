@@ -3,20 +3,42 @@
 
 import argparse
 import getpass
+import ipaddress
 import os
 import re
 import sys
 from pathlib import Path
+from urllib.parse import urlparse
 
 import frontmatter
 import markdown
 import requests
 from dotenv import load_dotenv
 
-__version__ = "0.2.1"
+__version__ = "0.3.0"
 
 VALID_STATUSES = {"draft", "publish", "pending", "private"}
 SITE_NAME_PATTERN = re.compile(r"^[a-zA-Z0-9][a-zA-Z0-9-]*$")
+PRIVATE_HOSTNAMES = {"localhost"}
+
+
+def is_private_url(url):
+    """Check if a URL points to a private/LAN or loopback address.
+
+    Returns True for RFC 1918 private IPs, loopback IPs, and 'localhost'.
+    Returns False for public IPs and unrecognized hostnames.
+    """
+    parsed = urlparse(url)
+    hostname = parsed.hostname or ""
+
+    if hostname in PRIVATE_HOSTNAMES:
+        return True
+
+    try:
+        addr = ipaddress.ip_address(hostname)
+        return addr.is_private or addr.is_loopback
+    except ValueError:
+        return False
 
 
 def get_config_dir():
@@ -76,7 +98,15 @@ def create_site_config(site_name=None):
         site_url = input("WP_SITE_URL: ").strip()
         if site_url.startswith("https://"):
             break
-        print("Error: URL must start with https://")
+        if site_url.startswith("http://") and is_private_url(site_url):
+            print(
+                "Warning: Using HTTP on a private/LAN address."
+                " Credentials are not encrypted in transit."
+            )
+            break
+        print(
+            "Error: URL must start with https:// (HTTP allowed only for private/LAN addresses)"
+        )
 
     wp_user = input("WP_USER: ").strip()
     if not wp_user:
@@ -229,8 +259,16 @@ def _load_env(env_path):
         sys.exit(1)
 
     if not site_url.startswith("https://"):
-        print("Error: WP_SITE_URL must use HTTPS to protect credentials in transit.")
-        sys.exit(1)
+        if site_url.startswith("http://") and is_private_url(site_url):
+            print(
+                "Warning: Using HTTP on a private/LAN address."
+                " Credentials are not encrypted in transit."
+            )
+        else:
+            print(
+                "Error: WP_SITE_URL must use HTTPS to protect credentials in transit."
+            )
+            sys.exit(1)
 
     return site_url.rstrip("/"), user, password, admin_path
 
@@ -260,8 +298,16 @@ def load_config(env_path):
         sys.exit(1)
 
     if not site_url.startswith("https://"):
-        print("Error: WP_SITE_URL must use HTTPS to protect credentials in transit.")
-        sys.exit(1)
+        if site_url.startswith("http://") and is_private_url(site_url):
+            print(
+                "Warning: Using HTTP on a private/LAN address."
+                " Credentials are not encrypted in transit."
+            )
+        else:
+            print(
+                "Error: WP_SITE_URL must use HTTPS to protect credentials in transit."
+            )
+            sys.exit(1)
 
     return site_url.rstrip("/"), user, password
 

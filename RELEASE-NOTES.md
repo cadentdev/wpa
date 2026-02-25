@@ -1,5 +1,32 @@
 # Release Notes
 
+## v0.3.0 — HTTP for Private/LAN Addresses + Multi-Platform CI (2026-02-25)
+
+### What's New
+
+- **HTTP allowed for private/LAN addresses** — `http://` URLs accepted for RFC 1918 private IPs (10.x, 172.16-31.x, 192.168.x), loopback (127.x), and `localhost`. HTTPS still required for all public addresses.
+- **Credential warning** — Prints a warning when HTTP is used on a private address: credentials are not encrypted in transit.
+- **Multi-platform CI** — Test matrix expanded to Linux (Python 3.11/3.12/3.13), macOS (3.12), and Windows (3.12) — 5 jobs total.
+
+### Security
+
+- HTTPS enforcement unchanged for public addresses — no regression
+- HTTP on private addresses prints explicit warning about unencrypted credentials
+- Uses Python's `ipaddress` module for reliable RFC 1918/loopback detection
+- `localhost` hostname special-cased as private
+
+### Quality
+
+- 97 tests | 99% coverage
+- CI matrix: 5 jobs across 3 OS × 3 Python versions
+
+### Closes
+
+- #7 — Allow HTTP for private/LAN addresses
+- #9 — Multi-platform CI test matrix
+
+---
+
 ## v0.2.1 — CI Pipeline and Improved CLI Help (2026-02-25)
 
 ### What's New

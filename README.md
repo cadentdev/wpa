@@ -87,7 +87,7 @@ If you have an existing `.env` in the repo root and no XDG configs, the tool wil
 ## Safety and Security
 
 - **Default status is always `draft`** — never publishes unless frontmatter explicitly says otherwise
-- **HTTPS enforced** — rejects `http://` site URLs to protect credentials in transit
+- **HTTPS enforced for public addresses** — rejects `http://` for public URLs; allows HTTP for private/LAN addresses (RFC 1918 + localhost) with a warning
 - **Credentials in XDG config** — stored outside the repo at `~/.config/wpa/` with 600 permissions
 - **Password input hidden** — uses `getpass` during interactive setup
 - **Status validation** — rejects typos and invalid values in frontmatter
@@ -101,4 +101,4 @@ pip install -r requirements-dev.txt
 pytest --cov=. --cov-report=term-missing
 ```
 
-72 tests | 99% coverage
+97 tests | 99% coverage
