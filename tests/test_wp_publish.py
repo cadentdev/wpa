@@ -691,6 +691,31 @@ class TestResolveConfig:
         site_url, user, password, admin_path = wp_publish.resolve_config()
         assert site_url == "https://example.com"
 
+    def test_zero_configs_migration_path(self, xdg_config, tmp_path, monkeypatch):
+        """resolve_config uses migration when repo .env exists and no XDG configs."""
+        repo_dir = tmp_path / "repo"
+        repo_dir.mkdir()
+        repo_env = repo_dir / ".env"
+        repo_env.write_text(
+            "WP_SITE_URL=https://migrated.example.com\n"
+            "WP_USER=migrateuser\n"
+            "WP_APP_PASSWORD=migratepass\n"
+        )
+        monkeypatch.setattr(wp_publish, "__file__", str(repo_dir / "wp-publish.py"))
+        (xdg_config / "wpa").mkdir(parents=True)
+
+        inputs = iter(["migrated", "n"])
+        monkeypatch.setattr("builtins.input", lambda prompt: next(inputs))
+
+        monkeypatch.delenv("WP_SITE_URL", raising=False)
+        monkeypatch.delenv("WP_USER", raising=False)
+        monkeypatch.delenv("WP_APP_PASSWORD", raising=False)
+        monkeypatch.delenv("WP_ADMIN_PATH", raising=False)
+
+        site_url, user, password, admin_path = wp_publish.resolve_config()
+        assert site_url == "https://migrated.example.com"
+        assert user == "migrateuser"
+
     def test_site_flag_no_interactive_prompts(self, single_site, monkeypatch):
         """resolve_config with --site never calls input()."""
         monkeypatch.delenv("WP_SITE_URL", raising=False)

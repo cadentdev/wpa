@@ -225,37 +225,31 @@ def _load_env(env_path):
     return site_url.rstrip("/"), user, password, admin_path
 
 
-def load_config(env_path=None):
-    """Load WordPress credentials.
+def load_config(env_path):
+    """Load WordPress credentials from a specific .env path.
 
-    Legacy interface: if env_path is given, load from that path directly.
-    Otherwise, use XDG config resolution.
+    Returns (site_url, user, password) — legacy 3-tuple interface.
+    New code should use resolve_config() which returns 4-tuple with admin_path.
     """
-    if env_path is not None:
-        # Legacy/test path
-        if not Path(env_path).exists():
-            print(f"Error: {env_path} not found. Copy .env.example to .env and fill in credentials.")
-            sys.exit(1)
+    if not Path(env_path).exists():
+        print(f"Error: {env_path} not found. Copy .env.example to .env and fill in credentials.")
+        sys.exit(1)
 
-        load_dotenv(env_path, override=True)
+    load_dotenv(env_path, override=True)
 
-        site_url = os.environ.get("WP_SITE_URL", "")
-        user = os.environ.get("WP_USER", "")
-        password = os.environ.get("WP_APP_PASSWORD", "")
+    site_url = os.environ.get("WP_SITE_URL", "")
+    user = os.environ.get("WP_USER", "")
+    password = os.environ.get("WP_APP_PASSWORD", "")
 
-        if not all([site_url, user, password]):
-            print("Error: WP_SITE_URL, WP_USER, and WP_APP_PASSWORD must all be set in .env")
-            sys.exit(1)
+    if not all([site_url, user, password]):
+        print("Error: WP_SITE_URL, WP_USER, and WP_APP_PASSWORD must all be set in .env")
+        sys.exit(1)
 
-        if not site_url.startswith("https://"):
-            print("Error: WP_SITE_URL must use HTTPS to protect credentials in transit.")
-            sys.exit(1)
+    if not site_url.startswith("https://"):
+        print("Error: WP_SITE_URL must use HTTPS to protect credentials in transit.")
+        sys.exit(1)
 
-        return site_url.rstrip("/"), user, password
-
-    # New XDG path — should not be called directly in new code
-    result = resolve_config()
-    return result[0], result[1], result[2]
+    return site_url.rstrip("/"), user, password
 
 
 def parse_page(filepath):
