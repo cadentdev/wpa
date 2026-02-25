@@ -531,6 +531,9 @@ class TestCreateSiteConfig:
         assert "WP_APP_PASSWORD=secret-pass" in content
         assert "WP_ADMIN_PATH=wp-admin" in content
 
+    @pytest.mark.skipif(
+        sys.platform == "win32", reason="Unix file permissions not supported on Windows"
+    )
     def test_file_permissions_600(self, xdg_config, monkeypatch):
         """create_site_config sets .env file permissions to 600."""
         inputs = iter(["https://example.com", "user", ""])
