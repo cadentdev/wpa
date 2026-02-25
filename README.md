@@ -8,24 +8,47 @@ Minimal CLI tool to publish markdown files as WordPress pages via the REST API.
 python3 -m venv .venv
 source .venv/bin/activate
 pip install -r requirements.txt
-cp .env.example .env
-# Edit .env with your WordPress credentials
 ```
 
-The `.env` file must be in the same directory as `wp-publish.py` (the repo root). The script locates it relative to its own path, not the working directory.
+### Create a site config
+
+```bash
+python3 wp-publish.py --new-site
+```
+
+This prompts for your WordPress URL, username, application password (hidden), and optional admin path. Configs are stored at `~/.config/wpa/<site-name>/.env` with `600` permissions.
 
 ### WordPress Application Password
 
 1. Log into wp-admin → Users → Your Profile
 2. Scroll to "Application Passwords"
 3. Enter name: "WPA CLI", click "Add New Application Password"
-4. Copy the generated password into `.env` as `WP_APP_PASSWORD`
+4. Copy the generated password (use it during `--new-site` setup)
 
 ## Usage
 
 ```bash
+# Publish a page (auto-selects site if only one config exists)
 python3 wp-publish.py pages/your-page.md
+
+# Specify which site to use
+python3 wp-publish.py --site mysite pages/your-page.md
+
+# Create a new site config
+python3 wp-publish.py --new-site
+
+# Show version
+python3 wp-publish.py --version
 ```
+
+### Multi-site behavior
+
+| Configs | `--site` flag | Behavior |
+|---------|---------------|----------|
+| 0 | No | Prompts to create a new config |
+| 1 | No | Uses the single config automatically |
+| 2+ | No | Prompts to select from list |
+| Any | Yes | Uses the named config (error if not found) |
 
 ### Markdown file format
 
@@ -43,13 +66,33 @@ Page content in markdown here...
 - `slug` (optional): URL slug
 - `status` (optional): `draft` (default), `publish`, `pending`, or `private`
 
+### Site config format
+
+Each site config is stored at `~/.config/wpa/<name>/.env`:
+
+```
+WP_SITE_URL=https://example.com
+WP_USER=your-username
+WP_APP_PASSWORD=xxxx xxxx xxxx xxxx
+WP_ADMIN_PATH=wp-admin
+```
+
+- `WP_ADMIN_PATH` is optional (defaults to `wp-admin`). Override it if your site uses a custom admin URL.
+- The `XDG_CONFIG_HOME` environment variable is respected if set.
+
+### Migration from repo-root .env
+
+If you have an existing `.env` in the repo root and no XDG configs, the tool will offer to migrate it on first run.
+
 ## Safety and Security
 
 - **Default status is always `draft`** — never publishes unless frontmatter explicitly says otherwise
 - **HTTPS enforced** — rejects `http://` site URLs to protect credentials in transit
+- **Credentials in XDG config** — stored outside the repo at `~/.config/wpa/` with 600 permissions
+- **Password input hidden** — uses `getpass` during interactive setup
 - **Status validation** — rejects typos and invalid values in frontmatter
+- **Site name validation** — only alphanumeric characters and hyphens allowed
 - **Connection error handling** — timeouts and network failures produce clear messages, not tracebacks
-- **Credentials in `.env` only** — `.gitignore` prevents accidental commits
 
 ## Development
 
@@ -58,4 +101,4 @@ pip install -r requirements-dev.txt
 pytest --cov=. --cov-report=term-missing
 ```
 
-20 tests | 99% coverage
+69 tests | 99% coverage
