@@ -1,4 +1,9 @@
-# WPA — WordPress Page Publisher
+# WPA — WordPress Automation
+
+[![CI](https://github.com/cadentdev/wpa/actions/workflows/ci.yml/badge.svg)](https://github.com/cadentdev/wpa/actions/workflows/ci.yml)
+[![Coverage](https://img.shields.io/badge/coverage-99%25-brightgreen)](https://github.com/cadentdev/wpa)
+[![Python](https://img.shields.io/badge/python-3.11%2B-blue)](https://www.python.org)
+[![License: MIT](https://img.shields.io/badge/license-MIT-green)](LICENSE)
 
 Minimal CLI tool to publish markdown files as WordPress pages via the REST API.
 
@@ -101,4 +106,7 @@ pip install -r requirements-dev.txt
 pytest --cov=. --cov-report=term-missing
 ```
 
-97 tests | 99% coverage
+## Links
+
+- [Release Notes](RELEASE-NOTES.md)
+- [Contributing](CONTRIBUTING.md)
