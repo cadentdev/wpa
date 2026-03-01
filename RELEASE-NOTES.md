@@ -1,5 +1,32 @@
 # Release Notes
 
+## v0.4.0 — Python Package with Subcommand CLI (2026-03-01)
+
+### What's New
+
+- **Proper Python package** — Restructured from single-file script (`wp-publish.py`) to `wpa/` package directory with `config.py`, `publish.py`, and `cli.py` modules
+- **Subcommand CLI** — New command structure: `wpa publish`, `wpa page create`, `wpa site add`, `wpa site list`
+- **PyPI-ready** — `pyproject.toml` with console script entry point, installable via `pip install wpa`
+- **Python 3.9+ support** — Expanded compatibility from 3.11+ to 3.9+, CI matrix now includes 3.9
+
+### Breaking Changes
+
+- The old `python3 wp-publish.py` invocation is replaced by `wpa` commands
+- `--new-site` flag replaced by `wpa site add` subcommand
+- `--site` flag now used with subcommands: `wpa publish --site mysite file.md`
+- `requirements.txt` and `requirements-dev.txt` replaced by `pyproject.toml`
+
+### Quality
+
+- 97 tests | 99% coverage
+- CI matrix: 6 jobs across 3 OS × 4 Python versions (3.9, 3.11, 3.12, 3.13)
+
+### Closes
+
+- #13 — Refactor for PyPI package distribution
+
+---
+
 ## v0.3.0 — HTTP for Private/LAN Addresses + Multi-Platform CI (2026-02-25)
 
 ### What's New
