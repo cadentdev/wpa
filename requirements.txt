@@ -1,4 +1,0 @@
-requests
-python-frontmatter
-markdown
-python-dotenv

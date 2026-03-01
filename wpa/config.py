@@ -1,7 +1,5 @@
-#!/usr/bin/env python3
-"""Publish markdown files as WordPress pages via REST API."""
+"""Site configuration management for WPA."""
 
-import argparse
 import getpass
 import ipaddress
 import os
@@ -10,14 +8,8 @@ import sys
 from pathlib import Path
 from urllib.parse import urlparse
 
-import frontmatter
-import markdown
-import requests
 from dotenv import load_dotenv
 
-__version__ = "0.3.0"
-
-VALID_STATUSES = {"draft", "publish", "pending", "private"}
 SITE_NAME_PATTERN = re.compile(r"^[a-zA-Z0-9][a-zA-Z0-9-]*$")
 PRIVATE_HOSTNAMES = {"localhost"}
 
@@ -61,9 +53,7 @@ def list_sites():
 
 def validate_site_name(name):
     """Validate site name is filesystem-safe (alphanumeric + hyphens)."""
-    if not name or not SITE_NAME_PATTERN.match(name):
-        return False
-    return True
+    return bool(name and SITE_NAME_PATTERN.match(name))
 
 
 def create_site_config(site_name=None):
@@ -141,7 +131,7 @@ def migrate_repo_env():
 
     Returns the path to the migrated .env, or None if user declines.
     """
-    repo_env = Path(__file__).parent / ".env"
+    repo_env = Path(__file__).parent.parent / ".env"
     if not repo_env.exists():
         return None
 
@@ -310,136 +300,3 @@ def load_config(env_path):
             sys.exit(1)
 
     return site_url.rstrip("/"), user, password
-
-
-def parse_page(filepath):
-    """Parse markdown file with YAML frontmatter."""
-    path = Path(filepath)
-    if not path.exists():
-        print(f"Error: File not found: {filepath}")
-        sys.exit(1)
-
-    post = frontmatter.load(path)
-
-    title = post.get("title")
-    if not title:
-        print(f"Error: Frontmatter must include 'title' in {filepath}")
-        sys.exit(1)
-
-    slug = post.get("slug", "")
-    status = post.get("status", "draft")
-
-    if status not in VALID_STATUSES:
-        print(
-            f"Error: Invalid status '{status}' in {filepath}. Must be one of: {', '.join(sorted(VALID_STATUSES))}"
-        )
-        sys.exit(1)
-
-    html_content = markdown.markdown(post.content)
-
-    return title, slug, status, html_content
-
-
-def publish_page(
-    site_url, user, password, title, slug, status, content, admin_path="wp-admin"
-):
-    """POST a page to WordPress REST API."""
-    endpoint = f"{site_url}/wp-json/wp/v2/pages"
-
-    payload = {
-        "title": title,
-        "content": content,
-        "status": status,
-    }
-    if slug:
-        payload["slug"] = slug
-
-    try:
-        response = requests.post(
-            endpoint,
-            json=payload,
-            auth=(user, password),
-            timeout=30,
-        )
-    except requests.ConnectionError:
-        print(
-            f"Error: Could not connect to {site_url}. Check the URL and your network connection."
-        )
-        return 1
-    except requests.Timeout:
-        print(f"Error: Request to {site_url} timed out after 30 seconds.")
-        return 1
-    except requests.RequestException as e:
-        print(f"Error: Request failed: {e}")
-        return 1
-
-    if response.status_code == 201:
-        data = response.json()
-        page_id = data["id"]
-        edit_url = f"{site_url}/{admin_path}/post.php?post={page_id}&action=edit"
-        print("Page created successfully!")
-        print(f"  ID:       {page_id}")
-        print(f"  Title:    {title}")
-        print(f"  Status:   {status}")
-        print(f"  Edit URL: {edit_url}")
-        return 0
-    else:
-        print(f"Error: WordPress API returned {response.status_code}")
-        try:
-            error = response.json()
-            print(f"  Code:    {error.get('code', 'unknown')}")
-            print(f"  Message: {error.get('message', 'unknown')}")
-        except ValueError:
-            print(f"  Body: {response.text[:200]}")
-        return 1
-
-
-def main():
-    parser = argparse.ArgumentParser(
-        description="Publish markdown files as WordPress pages.",
-        epilog="""\
-examples:
-  %(prog)s pages/my-page.md              Publish using auto-detected site config
-  %(prog)s --site demo pages/my-page.md  Publish using the "demo" site config
-  %(prog)s --new-site                    Create a new site config interactively
-
-config:
-  Site configs are stored at ~/.config/wpa/<site-name>/.env
-  On first run with no configs, you will be prompted to create one.
-""",
-        formatter_class=argparse.RawDescriptionHelpFormatter,
-    )
-    parser.add_argument(
-        "file", nargs="?", help="Path to markdown file with YAML frontmatter"
-    )
-    parser.add_argument(
-        "--site", help="Use named site config from ~/.config/wpa/<name>/"
-    )
-    parser.add_argument(
-        "--new-site",
-        action="store_true",
-        help="Create a new site config interactively",
-    )
-    parser.add_argument(
-        "--version", action="version", version=f"%(prog)s {__version__}"
-    )
-    args = parser.parse_args()
-
-    if args.new_site:
-        create_site_config()
-        return 0
-
-    if not args.file:
-        parser.error("the following arguments are required: file")
-
-    site_url, user, password, admin_path = resolve_config(site_name=args.site)
-    title, slug, status, content = parse_page(args.file)
-
-    print(f"Publishing '{title}' as {status} to {site_url}...")
-    return publish_page(
-        site_url, user, password, title, slug, status, content, admin_path=admin_path
-    )
-
-
-if __name__ == "__main__":
-    sys.exit(main())

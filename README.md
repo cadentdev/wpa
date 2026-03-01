@@ -2,23 +2,30 @@
 
 [![CI](https://github.com/cadentdev/wpa/actions/workflows/ci.yml/badge.svg)](https://github.com/cadentdev/wpa/actions/workflows/ci.yml)
 [![Coverage](https://img.shields.io/badge/coverage-99%25-brightgreen)](https://github.com/cadentdev/wpa)
-[![Python](https://img.shields.io/badge/python-3.11%2B-blue)](https://www.python.org)
+[![Python](https://img.shields.io/badge/python-3.9%2B-blue)](https://www.python.org)
+[![PyPI](https://img.shields.io/pypi/v/wpa)](https://pypi.org/project/wpa/)
 [![License: MIT](https://img.shields.io/badge/license-MIT-green)](LICENSE)
 
 Minimal CLI tool to publish markdown files as WordPress pages via the REST API.
 
-## Setup
+## Install
 
 ```bash
-python3 -m venv .venv
-source .venv/bin/activate
-pip install -r requirements.txt
+pip install wpa
+```
+
+Or install from source:
+
+```bash
+git clone https://github.com/cadentdev/wpa.git
+cd wpa
+pip install -e .
 ```
 
 ### Create a site config
 
 ```bash
-python3 wp-publish.py --new-site
+wpa site add
 ```
 
 This prompts for your WordPress URL, username, application password (hidden), and optional admin path. Configs are stored at `~/.config/wpa/<site-name>/.env` with `600` permissions.
@@ -34,16 +41,17 @@ This prompts for your WordPress URL, username, application password (hidden), an
 
 ```bash
 # Publish a page (auto-selects site if only one config exists)
-python3 wp-publish.py pages/your-page.md
+wpa publish pages/your-page.md
 
 # Specify which site to use
-python3 wp-publish.py --site mysite pages/your-page.md
+wpa publish --site mysite pages/your-page.md
 
-# Create a new site config
-python3 wp-publish.py --new-site
+# Create or manage site configs
+wpa site add
+wpa site list
 
 # Show version
-python3 wp-publish.py --version
+wpa --version
 ```
 
 ### Multi-site behavior
@@ -102,8 +110,8 @@ If you have an existing `.env` in the repo root and no XDG configs, the tool wil
 ## Development
 
 ```bash
-pip install -r requirements-dev.txt
-pytest --cov=. --cov-report=term-missing
+pip install -e '.[dev]'
+pytest --cov=wpa --cov-report=term-missing
 ```
 
 ## Links

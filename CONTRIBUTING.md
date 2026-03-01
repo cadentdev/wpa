@@ -7,14 +7,13 @@ Thanks for your interest in contributing!
 ```bash
 python3 -m venv .venv
 source .venv/bin/activate
-pip install -r requirements-dev.txt
-pip install ruff
+pip install -e '.[dev]'
 ```
 
 ## Running Tests
 
 ```bash
-pytest --cov=. --cov-report=term-missing
+pytest --cov=wpa --cov-report=term-missing
 ```
 
 All changes must maintain 99% coverage. Tests use mocked HTTP calls — no real WordPress connection needed.
