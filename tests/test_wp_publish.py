@@ -1,4 +1,4 @@
-"""Tests for wp-publish.py — TDD-equivalent backfill + v0.2.0 site config tests."""
+"""Tests for wpa package — TDD-equivalent backfill + v0.2.0 site config tests."""
 
 import sys
 from pathlib import Path
@@ -7,11 +7,20 @@ from unittest.mock import MagicMock, patch
 import pytest
 import requests
 
-# Add repo root to path so we can import the script
-sys.path.insert(0, str(Path(__file__).parent.parent))
-import importlib
-
-wp_publish = importlib.import_module("wp-publish")
+import wpa.config as wpa_config
+from wpa.config import (
+    _load_env,
+    create_site_config,
+    get_config_dir,
+    is_private_url,
+    list_sites,
+    load_config,
+    migrate_repo_env,
+    resolve_config,
+    validate_site_name,
+)
+from wpa.publish import parse_page, publish_page
+from wpa.cli import main
 
 
 # ---------------------------------------------------------------------------
@@ -111,35 +120,33 @@ def multi_site(xdg_config):
 class TestLoadConfig:
     def test_missing_env_file_exits(self, tmp_path, monkeypatch):
         """load_config exits 1 when .env file doesn't exist."""
-        monkeypatch.setattr(wp_publish, "__file__", str(tmp_path / "wp-publish.py"))
+        monkeypatch.setattr(wpa_config, "__file__", str(tmp_path / "wpa" / "config.py"))
         with pytest.raises(SystemExit) as exc_info:
-            wp_publish.load_config(env_path=str(tmp_path / ".env"))
+            load_config(env_path=str(tmp_path / ".env"))
         assert exc_info.value.code == 1
 
     def test_incomplete_env_vars_exits(self, tmp_path, monkeypatch):
         """load_config exits 1 when env vars are incomplete."""
         env = tmp_path / ".env"
         env.write_text("WP_SITE_URL=https://example.com\n")
-        monkeypatch.setattr(wp_publish, "__file__", str(tmp_path / "wp-publish.py"))
+        monkeypatch.setattr(wpa_config, "__file__", str(tmp_path / "wpa" / "config.py"))
         # Clear any pre-existing vars
         monkeypatch.delenv("WP_USER", raising=False)
         monkeypatch.delenv("WP_APP_PASSWORD", raising=False)
         with pytest.raises(SystemExit) as exc_info:
-            wp_publish.load_config(env_path=str(env))
+            load_config(env_path=str(env))
         assert exc_info.value.code == 1
 
     def test_valid_env_returns_config(self, valid_env_file, monkeypatch):
         """load_config returns (site_url, user, password) from valid .env."""
         monkeypatch.setattr(
-            wp_publish, "__file__", str(valid_env_file / "wp-publish.py")
+            wpa_config, "__file__", str(valid_env_file / "wpa" / "config.py")
         )
         # Clear env to ensure load_dotenv does the work
         monkeypatch.delenv("WP_SITE_URL", raising=False)
         monkeypatch.delenv("WP_USER", raising=False)
         monkeypatch.delenv("WP_APP_PASSWORD", raising=False)
-        site_url, user, password = wp_publish.load_config(
-            env_path=str(valid_env_file / ".env")
-        )
+        site_url, user, password = load_config(env_path=str(valid_env_file / ".env"))
         assert site_url == "https://example.com"
         assert user == "testuser"
         assert password == "xxxx xxxx xxxx xxxx"
@@ -152,12 +159,12 @@ class TestLoadConfig:
             "WP_USER=testuser\n"
             "WP_APP_PASSWORD=testpass\n"
         )
-        monkeypatch.setattr(wp_publish, "__file__", str(tmp_path / "wp-publish.py"))
+        monkeypatch.setattr(wpa_config, "__file__", str(tmp_path / "wpa" / "config.py"))
         monkeypatch.delenv("WP_SITE_URL", raising=False)
         monkeypatch.delenv("WP_USER", raising=False)
         monkeypatch.delenv("WP_APP_PASSWORD", raising=False)
         with pytest.raises(SystemExit) as exc_info:
-            wp_publish.load_config(env_path=str(env))
+            load_config(env_path=str(env))
         assert exc_info.value.code == 1
 
     def test_trailing_slash_stripped(self, tmp_path, monkeypatch):
@@ -168,11 +175,11 @@ class TestLoadConfig:
             "WP_USER=testuser\n"
             "WP_APP_PASSWORD=testpass\n"
         )
-        monkeypatch.setattr(wp_publish, "__file__", str(tmp_path / "wp-publish.py"))
+        monkeypatch.setattr(wpa_config, "__file__", str(tmp_path / "wpa" / "config.py"))
         monkeypatch.delenv("WP_SITE_URL", raising=False)
         monkeypatch.delenv("WP_USER", raising=False)
         monkeypatch.delenv("WP_APP_PASSWORD", raising=False)
-        site_url, _, _ = wp_publish.load_config(env_path=str(env))
+        site_url, _, _ = load_config(env_path=str(env))
         assert site_url == "https://example.com"
 
 
@@ -185,18 +192,18 @@ class TestParsePage:
     def test_file_not_found_exits(self):
         """parse_page exits 1 for nonexistent file."""
         with pytest.raises(SystemExit) as exc_info:
-            wp_publish.parse_page("/nonexistent/file.md")
+            parse_page("/nonexistent/file.md")
         assert exc_info.value.code == 1
 
     def test_missing_title_exits(self, no_title_md_file):
         """parse_page exits 1 when frontmatter has no title."""
         with pytest.raises(SystemExit) as exc_info:
-            wp_publish.parse_page(str(no_title_md_file))
+            parse_page(str(no_title_md_file))
         assert exc_info.value.code == 1
 
     def test_valid_file_returns_all_fields(self, valid_md_file):
         """parse_page returns title, slug, status, and HTML content."""
-        title, slug, status, html = wp_publish.parse_page(str(valid_md_file))
+        title, slug, status, html = parse_page(str(valid_md_file))
         assert title == "Test Page"
         assert slug == "test-page"
         assert status == "draft"
@@ -204,7 +211,7 @@ class TestParsePage:
 
     def test_defaults_slug_empty_and_status_draft(self, minimal_md_file):
         """parse_page defaults slug to '' and status to 'draft'."""
-        title, slug, status, html = wp_publish.parse_page(str(minimal_md_file))
+        title, slug, status, html = parse_page(str(minimal_md_file))
         assert title == "Minimal Page"
         assert slug == ""
         assert status == "draft"
@@ -216,7 +223,7 @@ class TestParsePage:
             '---\ntitle: "Bad Status"\nstatus: publis\n---\n\nTypo in status.\n'
         )
         with pytest.raises(SystemExit) as exc_info:
-            wp_publish.parse_page(str(md))
+            parse_page(str(md))
         assert exc_info.value.code == 1
 
     def test_publish_status_accepted(self, tmp_path):
@@ -225,7 +232,7 @@ class TestParsePage:
         md.write_text(
             '---\ntitle: "Published Page"\nstatus: publish\n---\n\nGoing live.\n'
         )
-        _, _, status, _ = wp_publish.parse_page(str(md))
+        _, _, status, _ = parse_page(str(md))
         assert status == "publish"
 
 
@@ -242,7 +249,7 @@ class TestPublishPage:
         mock_response.json.return_value = {"id": 42}
 
         with patch("requests.post", return_value=mock_response) as mock_post:
-            result = wp_publish.publish_page(
+            result = publish_page(
                 "https://example.com",
                 "user",
                 "pass",
@@ -271,7 +278,7 @@ class TestPublishPage:
         mock_response.json.return_value = {"id": 1}
 
         with patch("requests.post", return_value=mock_response) as mock_post:
-            wp_publish.publish_page(
+            publish_page(
                 "https://example.com",
                 "user",
                 "pass",
@@ -294,7 +301,7 @@ class TestPublishPage:
         }
 
         with patch("requests.post", return_value=mock_response):
-            result = wp_publish.publish_page(
+            result = publish_page(
                 "https://example.com",
                 "user",
                 "pass",
@@ -317,7 +324,7 @@ class TestPublishPage:
         mock_response.text = "<html>Internal Server Error</html>"
 
         with patch("requests.post", return_value=mock_response):
-            result = wp_publish.publish_page(
+            result = publish_page(
                 "https://example.com",
                 "user",
                 "pass",
@@ -335,7 +342,7 @@ class TestPublishPage:
     def test_connection_error_returns_one(self, capsys):
         """publish_page returns 1 on connection failure."""
         with patch("requests.post", side_effect=requests.ConnectionError("DNS failed")):
-            result = wp_publish.publish_page(
+            result = publish_page(
                 "https://example.com",
                 "user",
                 "pass",
@@ -352,7 +359,7 @@ class TestPublishPage:
     def test_timeout_returns_one(self, capsys):
         """publish_page returns 1 on request timeout."""
         with patch("requests.post", side_effect=requests.Timeout("timed out")):
-            result = wp_publish.publish_page(
+            result = publish_page(
                 "https://example.com",
                 "user",
                 "pass",
@@ -371,7 +378,7 @@ class TestPublishPage:
         with patch(
             "requests.post", side_effect=requests.RequestException("something broke")
         ):
-            result = wp_publish.publish_page(
+            result = publish_page(
                 "https://example.com",
                 "user",
                 "pass",
@@ -392,7 +399,7 @@ class TestPublishPage:
         mock_response.json.return_value = {"id": 42}
 
         with patch("requests.post", return_value=mock_response):
-            result = wp_publish.publish_page(
+            result = publish_page(
                 "https://example.com",
                 "user",
                 "pass",
@@ -414,7 +421,7 @@ class TestPublishPage:
         mock_response.json.return_value = {"id": 42}
 
         with patch("requests.post", return_value=mock_response):
-            result = wp_publish.publish_page(
+            result = publish_page(
                 "https://example.com",
                 "user",
                 "pass",
@@ -438,13 +445,13 @@ class TestGetConfigDir:
     def test_xdg_config_home_respected(self, monkeypatch):
         """get_config_dir uses XDG_CONFIG_HOME when set."""
         monkeypatch.setenv("XDG_CONFIG_HOME", "/custom/config")
-        assert wp_publish.get_config_dir() == Path("/custom/config/wpa")
+        assert get_config_dir() == Path("/custom/config/wpa")
 
     def test_default_config_dir(self, monkeypatch):
         """get_config_dir defaults to ~/.config/wpa."""
         monkeypatch.delenv("XDG_CONFIG_HOME", raising=False)
         expected = Path.home() / ".config" / "wpa"
-        assert wp_publish.get_config_dir() == expected
+        assert get_config_dir() == expected
 
 
 # ---------------------------------------------------------------------------
@@ -455,16 +462,16 @@ class TestGetConfigDir:
 class TestListSites:
     def test_empty_when_no_config_dir(self, xdg_config):
         """list_sites returns empty list when wpa dir doesn't exist."""
-        assert wp_publish.list_sites() == []
+        assert list_sites() == []
 
     def test_empty_when_no_sites(self, xdg_config):
         """list_sites returns empty list when wpa dir exists but is empty."""
         (xdg_config / "wpa").mkdir()
-        assert wp_publish.list_sites() == []
+        assert list_sites() == []
 
     def test_returns_sorted_sites(self, multi_site):
         """list_sites returns site names sorted alphabetically."""
-        sites = wp_publish.list_sites()
+        sites = list_sites()
         assert sites == ["alpha", "beta"]
 
     def test_ignores_dirs_without_env(self, xdg_config):
@@ -474,7 +481,7 @@ class TestListSites:
         (wpa_dir / "empty-site").mkdir()
         (wpa_dir / "valid-site").mkdir()
         (wpa_dir / "valid-site" / ".env").write_text("WP_SITE_URL=https://x.com\n")
-        assert wp_publish.list_sites() == ["valid-site"]
+        assert list_sites() == ["valid-site"]
 
 
 # ---------------------------------------------------------------------------
@@ -484,28 +491,28 @@ class TestListSites:
 
 class TestValidateSiteName:
     def test_valid_alphanumeric(self):
-        assert wp_publish.validate_site_name("demo") is True
+        assert validate_site_name("demo") is True
 
     def test_valid_with_hyphens(self):
-        assert wp_publish.validate_site_name("my-site") is True
+        assert validate_site_name("my-site") is True
 
     def test_valid_with_numbers(self):
-        assert wp_publish.validate_site_name("site1") is True
+        assert validate_site_name("site1") is True
 
     def test_invalid_empty(self):
-        assert wp_publish.validate_site_name("") is False
+        assert validate_site_name("") is False
 
     def test_invalid_spaces(self):
-        assert wp_publish.validate_site_name("my site") is False
+        assert validate_site_name("my site") is False
 
     def test_invalid_special_chars(self):
-        assert wp_publish.validate_site_name("my_site!") is False
+        assert validate_site_name("my_site!") is False
 
     def test_invalid_starts_with_hyphen(self):
-        assert wp_publish.validate_site_name("-leading") is False
+        assert validate_site_name("-leading") is False
 
     def test_invalid_path_traversal(self):
-        assert wp_publish.validate_site_name("../etc") is False
+        assert validate_site_name("../etc") is False
 
 
 # ---------------------------------------------------------------------------
@@ -520,7 +527,7 @@ class TestCreateSiteConfig:
         monkeypatch.setattr("builtins.input", lambda prompt: next(inputs))
         monkeypatch.setattr("getpass.getpass", lambda prompt: "secret-pass")
 
-        env_path = wp_publish.create_site_config(site_name="mysite")
+        env_path = create_site_config(site_name="mysite")
 
         expected = xdg_config / "wpa" / "mysite" / ".env"
         assert env_path == expected
@@ -540,7 +547,7 @@ class TestCreateSiteConfig:
         monkeypatch.setattr("builtins.input", lambda prompt: next(inputs))
         monkeypatch.setattr("getpass.getpass", lambda prompt: "pass")
 
-        env_path = wp_publish.create_site_config(site_name="test")
+        env_path = create_site_config(site_name="test")
 
         mode = env_path.stat().st_mode & 0o777
         assert mode == 0o600
@@ -548,7 +555,7 @@ class TestCreateSiteConfig:
     def test_invalid_site_name_exits(self, xdg_config, monkeypatch):
         """create_site_config exits on invalid site name."""
         with pytest.raises(SystemExit) as exc_info:
-            wp_publish.create_site_config(site_name="../bad")
+            create_site_config(site_name="../bad")
         assert exc_info.value.code == 1
 
     def test_prompts_for_site_name(self, xdg_config, monkeypatch):
@@ -557,7 +564,7 @@ class TestCreateSiteConfig:
         monkeypatch.setattr("builtins.input", lambda prompt: next(inputs))
         monkeypatch.setattr("getpass.getpass", lambda prompt: "pass")
 
-        env_path = wp_publish.create_site_config()
+        env_path = create_site_config()
         assert "mysite" in str(env_path)
 
     def test_https_required(self, xdg_config, monkeypatch):
@@ -566,7 +573,7 @@ class TestCreateSiteConfig:
         monkeypatch.setattr("builtins.input", lambda prompt: next(inputs))
         monkeypatch.setattr("getpass.getpass", lambda prompt: "pass")
 
-        env_path = wp_publish.create_site_config(site_name="test")
+        env_path = create_site_config(site_name="test")
         content = env_path.read_text()
         assert "https://good.com" in content
 
@@ -575,7 +582,7 @@ class TestCreateSiteConfig:
         monkeypatch.setattr("builtins.input", lambda prompt: "n")
 
         with pytest.raises(SystemExit) as exc_info:
-            wp_publish.create_site_config(site_name="demo")
+            create_site_config(site_name="demo")
         assert exc_info.value.code == 0
 
     def test_overwrite_protection_accept(self, single_site, monkeypatch):
@@ -584,7 +591,7 @@ class TestCreateSiteConfig:
         monkeypatch.setattr("builtins.input", lambda prompt: next(inputs))
         monkeypatch.setattr("getpass.getpass", lambda prompt: "newpass")
 
-        env_path = wp_publish.create_site_config(site_name="demo")
+        env_path = create_site_config(site_name="demo")
         content = env_path.read_text()
         assert "https://new.example.com" in content
 
@@ -594,7 +601,7 @@ class TestCreateSiteConfig:
         monkeypatch.setattr("builtins.input", lambda prompt: next(inputs))
 
         with pytest.raises(SystemExit) as exc_info:
-            wp_publish.create_site_config(site_name="test")
+            create_site_config(site_name="test")
         assert exc_info.value.code == 1
 
     def test_empty_password_exits(self, xdg_config, monkeypatch):
@@ -604,7 +611,7 @@ class TestCreateSiteConfig:
         monkeypatch.setattr("getpass.getpass", lambda prompt: "")
 
         with pytest.raises(SystemExit) as exc_info:
-            wp_publish.create_site_config(site_name="test")
+            create_site_config(site_name="test")
         assert exc_info.value.code == 1
 
     def test_default_admin_path(self, xdg_config, monkeypatch):
@@ -613,7 +620,7 @@ class TestCreateSiteConfig:
         monkeypatch.setattr("builtins.input", lambda prompt: next(inputs))
         monkeypatch.setattr("getpass.getpass", lambda prompt: "pass")
 
-        env_path = wp_publish.create_site_config(site_name="test")
+        env_path = create_site_config(site_name="test")
         content = env_path.read_text()
         assert "WP_ADMIN_PATH=wp-admin" in content
 
@@ -629,7 +636,7 @@ class TestCreateSiteConfig:
             return "secret"
 
         monkeypatch.setattr("getpass.getpass", mock_getpass)
-        wp_publish.create_site_config(site_name="test")
+        create_site_config(site_name="test")
         assert len(getpass_called) == 1
 
 
@@ -646,9 +653,7 @@ class TestResolveConfig:
         monkeypatch.delenv("WP_APP_PASSWORD", raising=False)
         monkeypatch.delenv("WP_ADMIN_PATH", raising=False)
 
-        site_url, user, password, admin_path = wp_publish.resolve_config(
-            site_name="demo"
-        )
+        site_url, user, password, admin_path = resolve_config(site_name="demo")
         assert site_url == "https://demo.example.com"
         assert user == "demouser"
         assert password == "demo-pass"
@@ -658,13 +663,13 @@ class TestResolveConfig:
         """resolve_config exits 1 when named site doesn't exist."""
         (xdg_config / "wpa").mkdir(parents=True)
         with pytest.raises(SystemExit) as exc_info:
-            wp_publish.resolve_config(site_name="nonexistent")
+            resolve_config(site_name="nonexistent")
         assert exc_info.value.code == 1
 
     def test_site_flag_not_found_shows_available(self, single_site, capsys):
         """resolve_config shows available sites when named site not found."""
         with pytest.raises(SystemExit):
-            wp_publish.resolve_config(site_name="nonexistent")
+            resolve_config(site_name="nonexistent")
         output = capsys.readouterr().out
         assert "demo" in output
 
@@ -675,7 +680,7 @@ class TestResolveConfig:
         monkeypatch.delenv("WP_APP_PASSWORD", raising=False)
         monkeypatch.delenv("WP_ADMIN_PATH", raising=False)
 
-        site_url, user, password, admin_path = wp_publish.resolve_config()
+        site_url, user, password, admin_path = resolve_config()
         assert site_url == "https://demo.example.com"
         output = capsys.readouterr().out
         assert "Using site: demo" in output
@@ -688,7 +693,7 @@ class TestResolveConfig:
         monkeypatch.delenv("WP_ADMIN_PATH", raising=False)
 
         monkeypatch.setattr("builtins.input", lambda prompt: "2")
-        site_url, user, _, _ = wp_publish.resolve_config()
+        site_url, user, _, _ = resolve_config()
         assert site_url == "https://beta.example.com"
         assert user == "betauser"
 
@@ -701,13 +706,13 @@ class TestResolveConfig:
 
         inputs = iter(["99", "abc", "1"])
         monkeypatch.setattr("builtins.input", lambda prompt: next(inputs))
-        site_url, _, _, _ = wp_publish.resolve_config()
+        site_url, _, _, _ = resolve_config()
         assert site_url == "https://alpha.example.com"
 
     def test_zero_configs_triggers_creation(self, xdg_config, monkeypatch):
         """resolve_config offers creation when no configs exist."""
         monkeypatch.setattr(
-            wp_publish, "__file__", str(xdg_config / "fake" / "wp-publish.py")
+            wpa_config, "__file__", str(xdg_config / "fake" / "wpa" / "config.py")
         )
         (xdg_config / "wpa").mkdir(parents=True)
 
@@ -721,7 +726,7 @@ class TestResolveConfig:
         monkeypatch.delenv("WP_APP_PASSWORD", raising=False)
         monkeypatch.delenv("WP_ADMIN_PATH", raising=False)
 
-        site_url, user, password, admin_path = wp_publish.resolve_config()
+        site_url, user, password, admin_path = resolve_config()
         assert site_url == "https://example.com"
 
     def test_zero_configs_migration_path(self, xdg_config, tmp_path, monkeypatch):
@@ -734,7 +739,7 @@ class TestResolveConfig:
             "WP_USER=migrateuser\n"
             "WP_APP_PASSWORD=migratepass\n"
         )
-        monkeypatch.setattr(wp_publish, "__file__", str(repo_dir / "wp-publish.py"))
+        monkeypatch.setattr(wpa_config, "__file__", str(repo_dir / "wpa" / "config.py"))
         (xdg_config / "wpa").mkdir(parents=True)
 
         inputs = iter(["migrated", "n"])
@@ -745,7 +750,7 @@ class TestResolveConfig:
         monkeypatch.delenv("WP_APP_PASSWORD", raising=False)
         monkeypatch.delenv("WP_ADMIN_PATH", raising=False)
 
-        site_url, user, password, admin_path = wp_publish.resolve_config()
+        site_url, user, password, admin_path = resolve_config()
         assert site_url == "https://migrated.example.com"
         assert user == "migrateuser"
 
@@ -764,7 +769,7 @@ class TestResolveConfig:
             return original_input(prompt)
 
         monkeypatch.setattr("builtins.input", tracking_input)
-        wp_publish.resolve_config(site_name="demo")
+        resolve_config(site_name="demo")
         assert len(input_called) == 0
 
 
@@ -790,7 +795,7 @@ class TestLoadEnv:
         monkeypatch.delenv("WP_APP_PASSWORD", raising=False)
         monkeypatch.delenv("WP_ADMIN_PATH", raising=False)
 
-        site_url, user, password, admin_path = wp_publish._load_env(env)
+        site_url, user, password, admin_path = _load_env(env)
         assert site_url == "https://test.example.com"  # trailing slash stripped
         assert user == "testuser"
         assert password == "testpass"
@@ -811,7 +816,7 @@ class TestLoadEnv:
         monkeypatch.delenv("WP_APP_PASSWORD", raising=False)
         monkeypatch.delenv("WP_ADMIN_PATH", raising=False)
 
-        _, _, _, admin_path = wp_publish._load_env(env)
+        _, _, _, admin_path = _load_env(env)
         assert admin_path == "wp-admin"
 
     def test_http_url_rejected(self, xdg_config, monkeypatch):
@@ -827,7 +832,7 @@ class TestLoadEnv:
         monkeypatch.delenv("WP_APP_PASSWORD", raising=False)
 
         with pytest.raises(SystemExit) as exc_info:
-            wp_publish._load_env(env)
+            _load_env(env)
         assert exc_info.value.code == 1
 
     def test_missing_vars_exits(self, xdg_config, monkeypatch):
@@ -841,7 +846,7 @@ class TestLoadEnv:
         monkeypatch.delenv("WP_APP_PASSWORD", raising=False)
 
         with pytest.raises(SystemExit) as exc_info:
-            wp_publish._load_env(env)
+            _load_env(env)
         assert exc_info.value.code == 1
 
 
@@ -853,8 +858,8 @@ class TestLoadEnv:
 class TestMigrateRepoEnv:
     def test_no_repo_env_returns_none(self, tmp_path, monkeypatch):
         """migrate_repo_env returns None when no repo-root .env."""
-        monkeypatch.setattr(wp_publish, "__file__", str(tmp_path / "wp-publish.py"))
-        assert wp_publish.migrate_repo_env() is None
+        monkeypatch.setattr(wpa_config, "__file__", str(tmp_path / "wpa" / "config.py"))
+        assert migrate_repo_env() is None
 
     def test_existing_xdg_configs_skips_migration(
         self, single_site, tmp_path, monkeypatch
@@ -862,8 +867,8 @@ class TestMigrateRepoEnv:
         """migrate_repo_env returns None when XDG configs already exist."""
         repo_env = tmp_path / ".env"
         repo_env.write_text("WP_SITE_URL=https://old.com\n")
-        monkeypatch.setattr(wp_publish, "__file__", str(tmp_path / "wp-publish.py"))
-        assert wp_publish.migrate_repo_env() is None
+        monkeypatch.setattr(wpa_config, "__file__", str(tmp_path / "wpa" / "config.py"))
+        assert migrate_repo_env() is None
 
     def test_migration_creates_xdg_config(self, xdg_config, tmp_path, monkeypatch):
         """migrate_repo_env copies repo .env to XDG path."""
@@ -873,11 +878,11 @@ class TestMigrateRepoEnv:
             "WP_USER=migrateuser\n"
             "WP_APP_PASSWORD=migratepass\n"
         )
-        monkeypatch.setattr(wp_publish, "__file__", str(tmp_path / "wp-publish.py"))
+        monkeypatch.setattr(wpa_config, "__file__", str(tmp_path / "wpa" / "config.py"))
         inputs = iter(["migrated", "n"])
         monkeypatch.setattr("builtins.input", lambda prompt: next(inputs))
 
-        result = wp_publish.migrate_repo_env()
+        result = migrate_repo_env()
         assert result is not None
         content = result.read_text()
         assert "https://migrated.com" in content
@@ -887,10 +892,10 @@ class TestMigrateRepoEnv:
         """migrate_repo_env returns None when user skips."""
         repo_env = tmp_path / ".env"
         repo_env.write_text("WP_SITE_URL=https://old.com\n")
-        monkeypatch.setattr(wp_publish, "__file__", str(tmp_path / "wp-publish.py"))
+        monkeypatch.setattr(wpa_config, "__file__", str(tmp_path / "wpa" / "config.py"))
         monkeypatch.setattr("builtins.input", lambda prompt: "")
 
-        assert wp_publish.migrate_repo_env() is None
+        assert migrate_repo_env() is None
 
     def test_migration_deletes_old_env(self, xdg_config, tmp_path, monkeypatch):
         """migrate_repo_env deletes repo .env when user confirms."""
@@ -898,11 +903,11 @@ class TestMigrateRepoEnv:
         repo_env.write_text(
             "WP_SITE_URL=https://old.com\nWP_USER=user\nWP_APP_PASSWORD=pass\n"
         )
-        monkeypatch.setattr(wp_publish, "__file__", str(tmp_path / "wp-publish.py"))
+        monkeypatch.setattr(wpa_config, "__file__", str(tmp_path / "wpa" / "config.py"))
         inputs = iter(["oldsite", "y"])
         monkeypatch.setattr("builtins.input", lambda prompt: next(inputs))
 
-        wp_publish.migrate_repo_env()
+        migrate_repo_env()
         assert not repo_env.exists()
 
     def test_migration_keeps_old_env(self, xdg_config, tmp_path, monkeypatch):
@@ -911,11 +916,11 @@ class TestMigrateRepoEnv:
         repo_env.write_text(
             "WP_SITE_URL=https://old.com\nWP_USER=user\nWP_APP_PASSWORD=pass\n"
         )
-        monkeypatch.setattr(wp_publish, "__file__", str(tmp_path / "wp-publish.py"))
+        monkeypatch.setattr(wpa_config, "__file__", str(tmp_path / "wpa" / "config.py"))
         inputs = iter(["oldsite", "n"])
         monkeypatch.setattr("builtins.input", lambda prompt: next(inputs))
 
-        wp_publish.migrate_repo_env()
+        migrate_repo_env()
         assert repo_env.exists()
 
     def test_migration_invalid_name_returns_none(
@@ -924,10 +929,10 @@ class TestMigrateRepoEnv:
         """migrate_repo_env returns None on invalid site name."""
         repo_env = tmp_path / ".env"
         repo_env.write_text("WP_SITE_URL=https://old.com\n")
-        monkeypatch.setattr(wp_publish, "__file__", str(tmp_path / "wp-publish.py"))
+        monkeypatch.setattr(wpa_config, "__file__", str(tmp_path / "wpa" / "config.py"))
         monkeypatch.setattr("builtins.input", lambda prompt: "../bad")
 
-        assert wp_publish.migrate_repo_env() is None
+        assert migrate_repo_env() is None
 
 
 # ---------------------------------------------------------------------------
@@ -940,64 +945,64 @@ class TestIsPrivateUrl:
 
     # RFC 1918 Class C (192.168.0.0/16)
     def test_192_168_is_private(self):
-        assert wp_publish.is_private_url("http://192.168.1.1") is True
+        assert is_private_url("http://192.168.1.1") is True
 
     def test_192_168_52_25_is_private(self):
-        assert wp_publish.is_private_url("http://192.168.52.25") is True
+        assert is_private_url("http://192.168.52.25") is True
 
     # RFC 1918 Class A (10.0.0.0/8)
     def test_10_x_is_private(self):
-        assert wp_publish.is_private_url("http://10.0.0.1") is True
+        assert is_private_url("http://10.0.0.1") is True
 
     def test_10_10_1_1_is_private(self):
-        assert wp_publish.is_private_url("http://10.10.1.1") is True
+        assert is_private_url("http://10.10.1.1") is True
 
     # RFC 1918 Class B (172.16.0.0/12)
     def test_172_16_is_private(self):
-        assert wp_publish.is_private_url("http://172.16.0.1") is True
+        assert is_private_url("http://172.16.0.1") is True
 
     def test_172_31_is_private(self):
-        assert wp_publish.is_private_url("http://172.31.255.255") is True
+        assert is_private_url("http://172.31.255.255") is True
 
     def test_172_15_is_not_private(self):
         """172.15.x.x is NOT in the 172.16.0.0/12 range."""
-        assert wp_publish.is_private_url("http://172.15.0.1") is False
+        assert is_private_url("http://172.15.0.1") is False
 
     def test_172_32_is_not_private(self):
         """172.32.x.x is NOT in the 172.16.0.0/12 range."""
-        assert wp_publish.is_private_url("http://172.32.0.1") is False
+        assert is_private_url("http://172.32.0.1") is False
 
     # Loopback (127.0.0.0/8)
     def test_127_0_0_1_is_private(self):
-        assert wp_publish.is_private_url("http://127.0.0.1") is True
+        assert is_private_url("http://127.0.0.1") is True
 
     def test_127_x_is_private(self):
-        assert wp_publish.is_private_url("http://127.255.255.255") is True
+        assert is_private_url("http://127.255.255.255") is True
 
     # localhost hostname
     def test_localhost_is_private(self):
-        assert wp_publish.is_private_url("http://localhost") is True
+        assert is_private_url("http://localhost") is True
 
     def test_localhost_with_port_is_private(self):
-        assert wp_publish.is_private_url("http://localhost:8080") is True
+        assert is_private_url("http://localhost:8080") is True
 
     # Public addresses
     def test_public_ip_is_not_private(self):
-        assert wp_publish.is_private_url("http://93.184.216.34") is False
+        assert is_private_url("http://93.184.216.34") is False
 
     def test_public_hostname_is_not_private(self):
-        assert wp_publish.is_private_url("http://example.com") is False
+        assert is_private_url("http://example.com") is False
 
     # HTTPS URLs (always valid, private check not relevant)
     def test_https_private_ip_still_private(self):
-        assert wp_publish.is_private_url("https://192.168.1.1") is True
+        assert is_private_url("https://192.168.1.1") is True
 
     # URL with port
     def test_private_ip_with_port(self):
-        assert wp_publish.is_private_url("http://192.168.52.25:8080") is True
+        assert is_private_url("http://192.168.52.25:8080") is True
 
     def test_public_ip_with_port(self):
-        assert wp_publish.is_private_url("http://93.184.216.34:8080") is False
+        assert is_private_url("http://93.184.216.34:8080") is False
 
 
 # ---------------------------------------------------------------------------
@@ -1021,7 +1026,7 @@ class TestLoadEnvPrivateHttp:
         monkeypatch.delenv("WP_APP_PASSWORD", raising=False)
         monkeypatch.delenv("WP_ADMIN_PATH", raising=False)
 
-        site_url, user, password, admin_path = wp_publish._load_env(env)
+        site_url, user, password, admin_path = _load_env(env)
         assert site_url == "http://192.168.52.25"
 
     def test_http_private_ip_prints_warning(self, xdg_config, monkeypatch, capsys):
@@ -1039,7 +1044,7 @@ class TestLoadEnvPrivateHttp:
         monkeypatch.delenv("WP_APP_PASSWORD", raising=False)
         monkeypatch.delenv("WP_ADMIN_PATH", raising=False)
 
-        wp_publish._load_env(env)
+        _load_env(env)
         output = capsys.readouterr().out
         assert "Warning" in output
         assert "not encrypted" in output.lower() or "HTTP" in output
@@ -1059,7 +1064,7 @@ class TestLoadEnvPrivateHttp:
         monkeypatch.delenv("WP_APP_PASSWORD", raising=False)
         monkeypatch.delenv("WP_ADMIN_PATH", raising=False)
 
-        site_url, _, _, _ = wp_publish._load_env(env)
+        site_url, _, _, _ = _load_env(env)
         assert site_url == "http://localhost:8080"
 
     def test_http_public_ip_rejected(self, xdg_config, monkeypatch):
@@ -1077,7 +1082,7 @@ class TestLoadEnvPrivateHttp:
         monkeypatch.delenv("WP_APP_PASSWORD", raising=False)
 
         with pytest.raises(SystemExit) as exc_info:
-            wp_publish._load_env(env)
+            _load_env(env)
         assert exc_info.value.code == 1
 
     def test_http_public_hostname_rejected(self, xdg_config, monkeypatch):
@@ -1095,7 +1100,7 @@ class TestLoadEnvPrivateHttp:
         monkeypatch.delenv("WP_APP_PASSWORD", raising=False)
 
         with pytest.raises(SystemExit) as exc_info:
-            wp_publish._load_env(env)
+            _load_env(env)
         assert exc_info.value.code == 1
 
 
@@ -1111,7 +1116,7 @@ class TestCreateSiteConfigPrivateHttp:
         monkeypatch.setattr("builtins.input", lambda prompt: next(inputs))
         monkeypatch.setattr("getpass.getpass", lambda prompt: "pass")
 
-        env_path = wp_publish.create_site_config(site_name="local")
+        env_path = create_site_config(site_name="local")
         content = env_path.read_text()
         assert "http://192.168.52.25" in content
 
@@ -1121,7 +1126,7 @@ class TestCreateSiteConfigPrivateHttp:
         monkeypatch.setattr("builtins.input", lambda prompt: next(inputs))
         monkeypatch.setattr("getpass.getpass", lambda prompt: "pass")
 
-        env_path = wp_publish.create_site_config(site_name="test")
+        env_path = create_site_config(site_name="test")
         content = env_path.read_text()
         assert "https://example.com" in content
 
@@ -1131,7 +1136,7 @@ class TestCreateSiteConfigPrivateHttp:
         monkeypatch.setattr("builtins.input", lambda prompt: next(inputs))
         monkeypatch.setattr("getpass.getpass", lambda prompt: "pass")
 
-        env_path = wp_publish.create_site_config(site_name="local")
+        env_path = create_site_config(site_name="local")
         content = env_path.read_text()
         assert "http://localhost:8080" in content
 
@@ -1142,77 +1147,75 @@ class TestCreateSiteConfigPrivateHttp:
 
 
 class TestMain:
-    def test_no_args_exits_with_error(self, monkeypatch):
-        """main exits 2 (argparse error) when no file argument provided."""
-        monkeypatch.setattr("sys.argv", ["wp-publish.py"])
-        with pytest.raises(SystemExit) as exc_info:
-            wp_publish.main()
-        assert exc_info.value.code == 2
+    def test_no_args_shows_help(self):
+        """main with no args prints help and returns 1."""
+        result = main([])
+        assert result == 1
 
-    def test_full_pipeline(self, single_site, valid_md_file, monkeypatch):
-        """main runs the full pipeline and returns 0 on success."""
+    def test_publish_subcommand(self, single_site, valid_md_file, monkeypatch):
+        """main publish runs the full pipeline and returns 0 on success."""
         monkeypatch.delenv("WP_SITE_URL", raising=False)
         monkeypatch.delenv("WP_USER", raising=False)
         monkeypatch.delenv("WP_APP_PASSWORD", raising=False)
         monkeypatch.delenv("WP_ADMIN_PATH", raising=False)
-        monkeypatch.setattr(
-            "sys.argv", ["wp-publish.py", "--site", "demo", str(valid_md_file)]
-        )
 
         mock_response = MagicMock()
         mock_response.status_code = 201
         mock_response.json.return_value = {"id": 99}
 
         with patch("requests.post", return_value=mock_response):
-            result = wp_publish.main()
+            result = main(["publish", "--site", "demo", str(valid_md_file)])
 
         assert result == 0
 
-    def test_new_site_flag(self, xdg_config, monkeypatch, capsys):
-        """main --new-site runs interactive creation and returns 0."""
-        monkeypatch.setattr("sys.argv", ["wp-publish.py", "--new-site"])
+    def test_page_create_subcommand(self, single_site, valid_md_file, monkeypatch):
+        """main page create runs the same pipeline as publish."""
+        monkeypatch.delenv("WP_SITE_URL", raising=False)
+        monkeypatch.delenv("WP_USER", raising=False)
+        monkeypatch.delenv("WP_APP_PASSWORD", raising=False)
+        monkeypatch.delenv("WP_ADMIN_PATH", raising=False)
+
+        mock_response = MagicMock()
+        mock_response.status_code = 201
+        mock_response.json.return_value = {"id": 99}
+
+        with patch("requests.post", return_value=mock_response):
+            result = main(["page", "create", "--site", "demo", str(valid_md_file)])
+
+        assert result == 0
+
+    def test_site_add_subcommand(self, xdg_config, monkeypatch, capsys):
+        """main site add runs interactive creation and returns 0."""
         inputs = iter(["testsite", "https://example.com", "user", ""])
         monkeypatch.setattr("builtins.input", lambda prompt: next(inputs))
         monkeypatch.setattr("getpass.getpass", lambda prompt: "pass")
 
-        result = wp_publish.main()
+        result = main(["site", "add"])
         assert result == 0
         output = capsys.readouterr().out
         assert "Saved to" in output
 
-    def test_version_flag(self, monkeypatch, capsys):
+    def test_site_list_subcommand(self, single_site, capsys):
+        """main site list shows configured sites."""
+        result = main(["site", "list"])
+        assert result == 0
+        output = capsys.readouterr().out
+        assert "demo" in output
+
+    def test_version_flag(self, capsys):
         """main --version prints version and exits."""
-        monkeypatch.setattr("sys.argv", ["wp-publish.py", "--version"])
         with pytest.raises(SystemExit) as exc_info:
-            wp_publish.main()
+            main(["--version"])
         assert exc_info.value.code == 0
         output = capsys.readouterr().out
-        assert "0.3.0" in output
+        assert "0.4.0" in output
 
-    def test_help_includes_examples(self, monkeypatch, capsys):
-        """--help output includes usage examples."""
-        monkeypatch.setattr("sys.argv", ["wp-publish.py", "--help"])
+    def test_help_flag(self, capsys):
+        """--help output includes subcommand listing."""
         with pytest.raises(SystemExit) as exc_info:
-            wp_publish.main()
+            main(["--help"])
         assert exc_info.value.code == 0
         output = capsys.readouterr().out
-        assert "examples:" in output
-        assert "--site demo" in output
-
-    def test_help_includes_config_location(self, monkeypatch, capsys):
-        """--help output shows config file location."""
-        monkeypatch.setattr("sys.argv", ["wp-publish.py", "--help"])
-        with pytest.raises(SystemExit) as exc_info:
-            wp_publish.main()
-        assert exc_info.value.code == 0
-        output = capsys.readouterr().out
-        assert "~/.config/wpa/" in output
-
-    def test_help_includes_first_run_note(self, monkeypatch, capsys):
-        """--help output mentions first-run config creation."""
-        monkeypatch.setattr("sys.argv", ["wp-publish.py", "--help"])
-        with pytest.raises(SystemExit) as exc_info:
-            wp_publish.main()
-        assert exc_info.value.code == 0
-        output = capsys.readouterr().out
-        assert "first run" in output.lower() or "prompted to create" in output.lower()
+        assert "publish" in output
+        assert "page" in output
+        assert "site" in output
