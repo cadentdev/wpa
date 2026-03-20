@@ -70,6 +70,26 @@ Other security plugins that may block Application Passwords:
 - **Solid Security** — check Settings → Advanced
 - **Custom security hardening** — check for filters on `wp_is_application_passwords_available`
 
+### Application Passwords over HTTP (staging / LAN sites)
+
+WordPress requires HTTPS for Application Passwords by default. The check in core (`wp-includes/user.php`) is:
+
+```php
+return is_ssl() || 'local' === wp_get_environment_type();
+```
+
+If your staging site uses HTTP (common for `.lan` / `.local` environments), authentication will silently fail with a `401 rest_not_logged_in` error even though the credentials are correct and Application Passwords are enabled.
+
+**Fix:** Add this line to `wp-config.php` on the staging server:
+
+```php
+define( 'WP_ENVIRONMENT_TYPE', 'local' );
+```
+
+Add it before the `/* That's all, stop editing! */` line. This is the WordPress-sanctioned way to enable Application Passwords on non-SSL sites — it tells WordPress the site is a local/staging environment.
+
+**Do not use this on production.** Production sites should always use HTTPS.
+
 ## Step 3: Verify authentication
 
 Test that your credentials work:
@@ -84,7 +104,8 @@ curl -s -u "USERNAME:APPPASSWORD" \
 | Response | Cause | Fix |
 |----------|-------|-----|
 | 200 + JSON | Auth works | Proceed to step 4 |
-| 401 | Bad credentials | Check username and app password; check Wordfence setting |
+| 401 `rest_not_logged_in` | App passwords disabled or blocked | Check Wordfence setting; for HTTP sites, add `WP_ENVIRONMENT_TYPE` (see above) |
+| 401 other | Bad credentials | Verify username and app password are correct |
 | 403 | Insufficient capabilities | User needs Administrator role |
 
 To verify the full user list endpoint (requires `list_users` capability):
@@ -112,13 +133,21 @@ The config is stored at `~/.config/wpa/<site-name>/.env` with 600 permissions.
 
 ### HTTP sites (staging / LAN)
 
-WPA enforces HTTPS for public addresses but allows HTTP for private/LAN addresses (RFC 1918, localhost, `.lan` domains). You'll see a warning:
+WPA enforces HTTPS for public addresses but allows HTTP for addresses it recognizes as private:
+
+- **IP addresses:** RFC 1918 private ranges (10.x, 172.16-31.x, 192.168.x), loopback (127.x)
+- **Hostnames:** `localhost`
+- **TLDs:** `.lan`, `.local`, `.test`, `.internal`
+
+You'll see a warning but the connection will proceed:
 
 ```
 Warning: Using HTTP on a private/LAN address. Credentials are not encrypted in transit.
 ```
 
 This is expected for local staging environments.
+
+**Note:** You also need `WP_ENVIRONMENT_TYPE` set to `local` in `wp-config.php` on the WordPress side — see the "Application Passwords over HTTP" section above. Both the WPA client and the WordPress server need to be configured for HTTP to work.
 
 ## Step 5: Test with `wpa user list`
 
