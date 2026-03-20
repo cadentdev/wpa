@@ -70,6 +70,28 @@ Other security plugins that may block Application Passwords:
 - **Solid Security** — check Settings → Advanced
 - **Custom security hardening** — check for filters on `wp_is_application_passwords_available`
 
+### Wordfence WAF and HTTP DELETE requests
+
+Wordfence's Web Application Firewall (WAF) may block `DELETE` HTTP requests, causing `wpa user delete` to return a `403 Forbidden` error (plain HTML, not a WordPress JSON error). This happens because the WAF runs as a PHP `auto_prepend_file` and intercepts the request before WordPress processes it.
+
+To fix, choose one of:
+
+1. **Wordfence → Firewall → All Firewall Options → Whitelisted URLs** — add `/wp-json/wp/v2/users/` to allow DELETE on user endpoints
+2. **Wordfence → Firewall** — set firewall mode to **Learning Mode** (appropriate for staging sites)
+3. **Wordfence → Firewall → All Firewall Options → Advanced Firewall Options** — check for rules blocking non-standard HTTP methods
+
+This only affects `DELETE` requests. `GET` (list) and `POST` (create, update) work with the default Wordfence configuration.
+
+### Wordfence password complexity
+
+Wordfence enforces password strength requirements on user creation. Passwords must include:
+- At least 12 characters
+- Uppercase and lowercase letters
+- At least one symbol
+- At least one number
+
+If `wpa user create` returns a `400` error with a password strength message, use a stronger password.
+
 ### Application Passwords over HTTP (staging / LAN sites)
 
 WordPress requires HTTPS for Application Passwords by default. The check in core (`wp-includes/user.php`) is:
