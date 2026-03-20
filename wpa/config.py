@@ -12,18 +12,23 @@ from dotenv import load_dotenv
 
 SITE_NAME_PATTERN = re.compile(r"^[a-zA-Z0-9][a-zA-Z0-9-]*$")
 PRIVATE_HOSTNAMES = {"localhost"}
+PRIVATE_TLDS = {".lan", ".local", ".test", ".internal"}
 
 
 def is_private_url(url):
     """Check if a URL points to a private/LAN or loopback address.
 
-    Returns True for RFC 1918 private IPs, loopback IPs, and 'localhost'.
+    Returns True for RFC 1918 private IPs, loopback IPs, 'localhost',
+    and hostnames ending in private TLDs (.lan, .local, .test, .internal).
     Returns False for public IPs and unrecognized hostnames.
     """
     parsed = urlparse(url)
     hostname = parsed.hostname or ""
 
     if hostname in PRIVATE_HOSTNAMES:
+        return True
+
+    if any(hostname.endswith(tld) for tld in PRIVATE_TLDS):
         return True
 
     try:
