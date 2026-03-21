@@ -147,6 +147,9 @@ pytest --cov=wpa --cov-report=term-missing
 
 ## Links
 
+- [Product Requirements Document](wpa-prd.md) — Vision, design principles, command structure, and implementation roadmap
 - [Getting Started](GETTING-STARTED.md) — REST API setup, Wordfence notes, staging guide
 - [Release Notes](RELEASE-NOTES.md)
 - [Contributing](CONTRIBUTING.md)
+- [WP-CLI Command Inventory](docs/wp-cli-command-inventory.md) — Complete catalog of WP-CLI 2.12.0 commands used as the template for WPA planning
+- [WP-CLI REST API Mapping Matrix](docs/wp-cli-rest-api-mapping-matrix.md) — Feasibility classification of every WP-CLI command against the REST API
