@@ -1,5 +1,31 @@
 # Release Notes
 
+## v0.5.0 — User Management (2026-03-21)
+
+### What's New
+
+- **`wpa user` subcommand** — Full CRUD for WordPress users via the REST API, following wp-cli conventions: `list`, `create`, `update`, `delete`
+- **Shared output formatter** — `--format` flag supports `table` (default), `json`, `csv`, `tsv` output. Reusable across future list commands.
+- **Field selection** — `--fields id,username,email,roles` to control which columns appear in output
+- **List filtering** — `--role editor` and `--search "jane"` narrow results server-side
+- **Private TLD recognition** — `.lan`, `.local`, `.test`, `.internal` hostnames now recognized as private addresses (HTTP allowed with warning)
+- **GETTING-STARTED.md** — Setup guide covering REST API configuration, Application Passwords, Wordfence compatibility, and HTTP staging sites
+
+### Known Limitations
+
+- **Wordfence WAF blocks DELETE** — Sites running Wordfence may return 403 on `wpa user delete`. See [GETTING-STARTED.md](GETTING-STARTED.md#wordfence-waf-blocks-delete-requests) for workarounds.
+
+### Quality
+
+- 145 tests | 99% coverage
+- Live-tested against WordPress 6.x staging site (list, create, update verified; delete blocked by Wordfence WAF)
+
+### Closes
+
+- #16 — User management subcommand
+
+---
+
 ## v0.4.0 — Python Package with Subcommand CLI (2026-03-01)
 
 ### What's New

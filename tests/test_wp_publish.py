@@ -1208,7 +1208,7 @@ class TestMain:
             main(["--version"])
         assert exc_info.value.code == 0
         output = capsys.readouterr().out
-        assert "0.4.0" in output
+        assert "0.5.0" in output
 
     def test_help_flag(self, capsys):
         """--help output includes subcommand listing."""
