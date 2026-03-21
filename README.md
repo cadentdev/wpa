@@ -6,7 +6,7 @@
 [![PyPI](https://img.shields.io/pypi/v/wpa)](https://pypi.org/project/wpa/)
 [![License: MIT](https://img.shields.io/badge/license-MIT-green)](LICENSE)
 
-Minimal CLI tool to publish markdown files as WordPress pages via the REST API.
+CLI tool for WordPress automation — publish pages and manage users via the REST API.
 
 ## Install
 
@@ -39,18 +39,49 @@ This prompts for your WordPress URL, username, application password (hidden), an
 
 ## Usage
 
+### Publish pages
+
 ```bash
 # Publish a page (auto-selects site if only one config exists)
 wpa publish pages/your-page.md
 
 # Specify which site to use
 wpa publish --site mysite pages/your-page.md
+```
 
-# Create or manage site configs
+### Manage users
+
+```bash
+# List all users
+wpa user list --site mysite
+
+# List users as JSON, specific fields only
+wpa user list --site mysite --format json --fields id,username,email,roles
+
+# Export users to TSV
+wpa user list --site mysite --format tsv > users.tsv
+
+# Filter by role or search term
+wpa user list --site mysite --role editor
+wpa user list --site mysite --search "jane"
+
+# Create a user
+wpa user create --site mysite --username jdoe --email jdoe@example.com --role author
+
+# Update a user
+wpa user update 42 --site mysite --email newemail@example.com --role editor
+
+# Delete a user (reassign their posts to user 1)
+wpa user delete 42 --site mysite --reassign 1
+```
+
+Output formats: `table` (default), `json`, `csv`, `tsv`. Use `--fields` to select columns (available: `id`, `username`, `email`, `first_name`, `last_name`, `display_name`, `roles`, `registered`, `url`).
+
+### Site management
+
+```bash
 wpa site add
 wpa site list
-
-# Show version
 wpa --version
 ```
 
@@ -100,7 +131,7 @@ If you have an existing `.env` in the repo root and no XDG configs, the tool wil
 ## Safety and Security
 
 - **Default status is always `draft`** — never publishes unless frontmatter explicitly says otherwise
-- **HTTPS enforced for public addresses** — rejects `http://` for public URLs; allows HTTP for private/LAN addresses (RFC 1918 + localhost) with a warning
+- **HTTPS enforced for public addresses** — rejects `http://` for public URLs; allows HTTP for private/LAN addresses (RFC 1918, localhost, `.lan`/`.local`/`.test`/`.internal` TLDs) with a warning
 - **Credentials in XDG config** — stored outside the repo at `~/.config/wpa/` with 600 permissions
 - **Password input hidden** — uses `getpass` during interactive setup
 - **Status validation** — rejects typos and invalid values in frontmatter
@@ -116,5 +147,6 @@ pytest --cov=wpa --cov-report=term-missing
 
 ## Links
 
+- [Getting Started](GETTING-STARTED.md) — REST API setup, Wordfence notes, staging guide
 - [Release Notes](RELEASE-NOTES.md)
 - [Contributing](CONTRIBUTING.md)
