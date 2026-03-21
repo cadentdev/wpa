@@ -145,7 +145,7 @@ def _do_user_delete(args):
 def main(argv=None):
     parser = argparse.ArgumentParser(
         prog="wpa",
-        description="WordPress Automation — publish markdown files as WordPress pages.",
+        description="WordPress Automation — publish pages and manage users via the REST API.",
     )
     parser.add_argument(
         "--version", action="version", version=f"%(prog)s {__version__}"
