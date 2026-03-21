@@ -4,7 +4,7 @@
 **Version:** PRD v1.0
 **Date:** 2026-03-21
 **Author:** Neil Johnson, Cadent Creative
-**Current release:** v0.4.0
+**Current release:** v0.5.1
 **Repository:** [github.com/cadentdev/wpa](https://github.com/cadentdev/wpa)
 **PyPI:** [pypi.org/project/wpa](https://pypi.org/project/wpa/)
 **License:** MIT
@@ -207,7 +207,7 @@ The `--site` flag selects a named config. With one config, it auto-selects. With
 
 ## 6. Command structure
 
-### 6.1 Implemented commands (v0.4.0)
+### 6.1 Implemented commands (v0.5.1)
 
 | Command | Description |
 |---|---|
@@ -215,6 +215,10 @@ The `--site` flag selects a named config. With one config, it auto-selects. With
 | `wpa page create <file.md>` | Create a page from markdown with frontmatter |
 | `wpa site add` | Interactively add a new site configuration |
 | `wpa site list` | List all configured sites |
+| `wpa user list` | List users with `--role`, `--search`, `--format`, `--fields` |
+| `wpa user create` | Create user with `--username`, `--email`, `--role`, `--password` |
+| `wpa user update <id>` | Update user fields |
+| `wpa user delete <id>` | Delete user with `--reassign` |
 | `wpa --version` | Display WPA version |
 
 ### 6.2 Planned command groups
@@ -285,40 +289,50 @@ Based on the REST API mapping matrix, the following command groups are implement
 
 ## 7. Implementation roadmap
 
-### Phase 1: Foundation (v0.5.0) — Core content CRUD
+### Phase 1: Package structure and user management (v0.4.0–v0.5.1) — COMPLETE
 
-**Goal:** Establish the reusable API client layer and output formatting system, then implement the most-used content management commands.
+**Delivered:** Python package with subcommand CLI, PyPI distribution, multi-site config, user CRUD, shared output formatter, security hardening.
+
+| Deliverable | Status |
+|---|---|
+| Package restructure (`wpa/` with `cli.py`, `config.py`, `publish.py`) | Shipped v0.4.0 |
+| Subcommand CLI (`wpa publish`, `wpa page create`, `wpa site add/list`) | Shipped v0.4.0 |
+| `wpa user list/create/update/delete` | Shipped v0.5.0 |
+| `formatter.py` — shared output formatting (table, json, csv, tsv) with `--fields` | Shipped v0.5.0 |
+| Security hardening (user ID validation, JSON error handling, response sanitization) | Shipped v0.5.1 |
+| `CLAUDE.md` — agent-facing documentation for Claude Code | Shipped v0.5.1 |
+
+### Phase 2: API client layer and post/page CRUD (v0.6.0)
+
+**Goal:** Extract a reusable API client from existing modules, then implement the most-used content management commands.
 
 | Deliverable | Details |
 |---|---|
 | `api.py` module | Reusable REST API client with auth, pagination, error handling, retries |
-| `format.py` module | `--json`, `--fields`, `--field`, `--ids`, `--count` output formatting |
+| Extend `formatter.py` | Add `--ids`, `--count`, and `--field` (singular) output modes |
 | `wpa post list` | List posts with filtering (`--status`, `--author`, `--search`, `--per-page`) |
 | `wpa post get <id>` | Get a single post by ID |
-| `wpa post create` | Create post from CLI flags or stdin |
+| `wpa post create` | Create post from CLI flags, `--from-file`, or stdin |
 | `wpa post update <id>` | Update post fields |
 | `wpa post delete <id>` | Delete/trash a post |
-| `wpa page list/get/create/update/delete` | Same operations for pages |
+| `wpa page list/get/update/delete` | Expand page subcommand to full CRUD |
 | Refactor `wpa publish` | Use new `api.py` layer; maintain backward compatibility |
+| Refactor `wpa user` | Use new `api.py` layer; verify all existing tests pass |
 
-**Definition of done:** All commands have tests, 99% coverage maintained, CI passing across 3 OS × 4 Python versions.
+**Definition of done:** All commands have tests, 99% coverage maintained, CI passing across 3 OS × 4 Python versions. No direct `requests` calls outside `api.py`.
 
-### Phase 2: Users and media (v0.6.0)
+### Phase 3: Media and user enhancements (v0.7.0)
 
 | Deliverable | Details |
 |---|---|
-| `wpa user list` | List users with `--role`, `--search` filters |
-| `wpa user get <id>` | Get user details |
-| `wpa user create` | Create user with `--username`, `--email`, `--role`, `--password` |
-| `wpa user update <id>` | Update user fields |
-| `wpa user delete <id>` | Delete user with `--reassign` |
-| `wpa user set-role <id> <role>` | Set user role |
 | `wpa media import <file>` | Upload local file or URL as media attachment |
 | `wpa media list` | List media with filters |
 | `wpa media get <id>` | Get media details |
 | `wpa media delete <id>` | Delete media attachment |
+| `wpa user get <id>` | Get user details |
+| `wpa user set-role <id> <role>` | Set user role |
 
-### Phase 3: Comments and terms (v0.7.0)
+### Phase 4: Comments and terms (v0.8.0)
 
 | Deliverable | Details |
 |---|---|
@@ -328,7 +342,7 @@ Based on the REST API mapping matrix, the following command groups are implement
 | `wpa tag` alias | Convenience alias for `wpa term --taxonomy=post_tag` |
 | Reusable meta handler | Shared logic for `meta add/get/update/delete/list` across entities |
 
-### Phase 4: Plugins, menus, and widgets (v0.8.0)
+### Phase 5: Plugins, menus, and widgets (v0.9.0)
 
 | Deliverable | Details |
 |---|---|
@@ -338,7 +352,7 @@ Based on the REST API mapping matrix, the following command groups are implement
 | `wpa sidebar list` | List registered sidebars |
 | `wpa option` subcommands | `get`, `update`, `list` for registered settings |
 
-### Phase 5: Introspection and discovery (v0.9.0)
+### Phase 6: Introspection and discovery (v0.10.0)
 
 | Deliverable | Details |
 |---|---|
@@ -349,12 +363,11 @@ Based on the REST API mapping matrix, the following command groups are implement
 | `wpa theme list/get` | Read-only theme information |
 | `wpa user application-password` | Manage application passwords for users |
 
-### Phase 6: Polish and 1.0 (v1.0.0)
+### Phase 7: Polish and 1.0 (v1.0.0)
 
 | Deliverable | Details |
 |---|---|
 | Shell completion | Tab completion for bash, zsh, fish |
-| `CLAUDE.md` | Agent-facing documentation for Claude Code integration |
 | MCP server | Optional MCP (Model Context Protocol) server wrapper for direct LLM tool use |
 | Comprehensive docs | Full documentation site or README expansion |
 | Stable API contract | CLI interface locked for backward compatibility |
@@ -368,11 +381,12 @@ These documents are maintained alongside this PRD in the `wpa` repository and sh
 
 | Document | Purpose |
 |---|---|
-| `wp-cli-command-inventory.md` | Complete catalog of all WP-CLI 2.12.0 commands and subcommands (46 top-level groups, ~280+ subcommands) |
-| `wp-cli-rest-api-mapping-matrix.md` | Classification of every WP-CLI command against REST API feasibility (FULL / PARTIAL / NOT POSSIBLE / N/A) |
-| `RELEASE-NOTES.md` | Per-version changelog (already in repo) |
-| `CONTRIBUTING.md` | Contribution guidelines (already in repo) |
-| `CLAUDE.md` | Agent-facing documentation for Claude Code (planned for Phase 6) |
+| `docs/wp-cli-command-inventory.md` | Complete catalog of all WP-CLI 2.12.0 commands and subcommands (46 top-level groups, ~280+ subcommands) |
+| `docs/wp-cli-rest-api-mapping-matrix.md` | Classification of every WP-CLI command against REST API feasibility (FULL / PARTIAL / NOT POSSIBLE / N/A) |
+| `docs/wpa-development-recommendations.md` | Prioritized development recommendations for the current sprint |
+| `RELEASE-NOTES.md` | Per-version changelog |
+| `CONTRIBUTING.md` | Contribution guidelines |
+| `CLAUDE.md` | Agent-facing documentation for Claude Code |
 
 ---
 
