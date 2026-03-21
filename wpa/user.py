@@ -47,6 +47,13 @@ def validate_fields(fields_str):
     return fields
 
 
+def _validate_user_id(user_id):
+    """Validate user_id is a positive integer to prevent path injection."""
+    if not isinstance(user_id, int) or user_id < 1:
+        print(f"Error: Invalid user ID: {user_id}")
+        sys.exit(1)
+
+
 def _extract_user_row(api_user):
     """Convert a WP REST API user object to a flat dict with friendly keys."""
     row = {}
@@ -80,8 +87,35 @@ def _handle_api_error(response):
         print(f"  Code:    {error.get('code', 'unknown')}")
         print(f"  Message: {error.get('message', 'unknown')}")
     except ValueError:
-        print(f"  Body: {response.text[:200]}")
+        # Truncate and sanitize non-JSON response body
+        body = response.text[:200].replace("\n", " ").replace("\r", "")
+        print(f"  Body: {body}")
     sys.exit(1)
+
+
+def _users_endpoint(site_url):
+    """Return the WordPress users REST API endpoint URL."""
+    return f"{site_url}/wp-json/wp/v2/users"
+
+
+def _request(method, url, site_url, auth, expected_status, **kwargs):
+    """Make an authenticated request and handle errors consistently.
+
+    Returns the parsed JSON response.
+    """
+    try:
+        response = method(url, auth=auth, timeout=30, **kwargs)
+    except requests.RequestException as e:
+        _handle_request_error(e, site_url)
+
+    if response.status_code != expected_status:
+        _handle_api_error(response)
+
+    try:
+        return response.json()
+    except ValueError:
+        print(f"Error: Invalid JSON in response from {site_url}")
+        sys.exit(1)
 
 
 def list_users(site_url, user, password, role=None, search=None):
@@ -97,27 +131,21 @@ def list_users(site_url, user, password, role=None, search=None):
     Returns:
         List of user dicts with friendly field names.
     """
-    endpoint = f"{site_url}/wp-json/wp/v2/users"
     params = {"context": "edit", "per_page": 100}
     if role:
         params["roles"] = role
     if search:
         params["search"] = search
 
-    try:
-        response = requests.get(
-            endpoint,
-            params=params,
-            auth=(user, password),
-            timeout=30,
-        )
-    except requests.RequestException as e:
-        _handle_request_error(e, site_url)
-
-    if response.status_code != 200:
-        _handle_api_error(response)
-
-    return [_extract_user_row(u) for u in response.json()]
+    data = _request(
+        requests.get,
+        _users_endpoint(site_url),
+        site_url,
+        auth=(user, password),
+        expected_status=200,
+        params=params,
+    )
+    return [_extract_user_row(u) for u in data]
 
 
 def create_user(
@@ -147,7 +175,6 @@ def create_user(
     Returns:
         Created user dict from API response.
     """
-    endpoint = f"{site_url}/wp-json/wp/v2/users"
     payload = {
         "username": username,
         "email": email,
@@ -160,20 +187,14 @@ def create_user(
     if last_name:
         payload["last_name"] = last_name
 
-    try:
-        response = requests.post(
-            endpoint,
-            json=payload,
-            auth=(user, password),
-            timeout=30,
-        )
-    except requests.RequestException as e:
-        _handle_request_error(e, site_url)
-
-    if response.status_code != 201:
-        _handle_api_error(response)
-
-    return response.json()
+    return _request(
+        requests.post,
+        _users_endpoint(site_url),
+        site_url,
+        auth=(user, password),
+        expected_status=201,
+        json=payload,
+    )
 
 
 def update_user(
@@ -193,7 +214,7 @@ def update_user(
         site_url: WordPress site URL.
         user: Username for authentication.
         password: Application password.
-        user_id: ID of the user to update.
+        user_id: ID of the user to update (must be a positive integer).
         email: New email address.
         role: New role.
         first_name: New first name.
@@ -203,7 +224,8 @@ def update_user(
     Returns:
         Updated user dict from API response.
     """
-    endpoint = f"{site_url}/wp-json/wp/v2/users/{user_id}"
+    _validate_user_id(user_id)
+
     payload = {}
     if email is not None:
         payload["email"] = email
@@ -216,20 +238,21 @@ def update_user(
     if display_name is not None:
         payload["name"] = display_name
 
-    try:
-        response = requests.post(
-            endpoint,
-            json=payload,
-            auth=(user, password),
-            timeout=30,
+    if not payload:
+        print(
+            "Error: No fields to update. Specify at least one of: "
+            "--email, --role, --first-name, --last-name, --display-name"
         )
-    except requests.RequestException as e:
-        _handle_request_error(e, site_url)
+        sys.exit(1)
 
-    if response.status_code != 200:
-        _handle_api_error(response)
-
-    return response.json()
+    return _request(
+        requests.post,
+        f"{_users_endpoint(site_url)}/{user_id}",
+        site_url,
+        auth=(user, password),
+        expected_status=200,
+        json=payload,
+    )
 
 
 def delete_user(site_url, user, password, user_id, reassign=None):
@@ -239,28 +262,23 @@ def delete_user(site_url, user, password, user_id, reassign=None):
         site_url: WordPress site URL.
         user: Username for authentication.
         password: Application password.
-        user_id: ID of the user to delete.
+        user_id: ID of the user to delete (must be a positive integer).
         reassign: User ID to reassign posts to. If None, posts are deleted.
 
     Returns:
         Deletion response dict from API.
     """
-    endpoint = f"{site_url}/wp-json/wp/v2/users/{user_id}"
+    _validate_user_id(user_id)
+
     params = {"force": True}
     if reassign is not None:
         params["reassign"] = reassign
 
-    try:
-        response = requests.delete(
-            endpoint,
-            params=params,
-            auth=(user, password),
-            timeout=30,
-        )
-    except requests.RequestException as e:
-        _handle_request_error(e, site_url)
-
-    if response.status_code != 200:
-        _handle_api_error(response)
-
-    return response.json()
+    return _request(
+        requests.delete,
+        f"{_users_endpoint(site_url)}/{user_id}",
+        site_url,
+        auth=(user, password),
+        expected_status=200,
+        params=params,
+    )
