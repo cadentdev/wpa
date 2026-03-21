@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "wpa"
-version = "0.5.0"
+version = "0.5.1"
 description = "WordPress Automation — publish pages and manage users via the REST API"
 readme = "README.md"
 license = "MIT"

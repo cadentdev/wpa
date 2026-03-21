@@ -8,6 +8,7 @@ from wpa.user import (
     AVAILABLE_FIELDS,
     DEFAULT_FIELDS,
     USER_FIELDS,
+    _validate_user_id,
     create_user,
     delete_user,
     list_users,
@@ -339,3 +340,58 @@ class TestDeleteUser:
                 "pass",
                 user_id=999,
             )
+
+
+# --- Security: user_id validation ---
+
+
+class TestUserIdValidation:
+    def test_valid_positive_integer(self):
+        # Should not raise
+        _validate_user_id(1)
+        _validate_user_id(999)
+
+    def test_zero_rejected(self):
+        with pytest.raises(SystemExit):
+            _validate_user_id(0)
+
+    def test_negative_rejected(self):
+        with pytest.raises(SystemExit):
+            _validate_user_id(-1)
+
+    def test_string_rejected(self):
+        with pytest.raises(SystemExit):
+            _validate_user_id("1")
+
+    def test_path_injection_rejected(self):
+        with pytest.raises(SystemExit):
+            _validate_user_id("1/../../wp-json/wp/v2/settings")
+
+
+# --- Security: empty update payload ---
+
+
+class TestEmptyUpdatePayload:
+    def test_update_with_no_fields_exits(self):
+        with pytest.raises(SystemExit):
+            update_user(
+                "https://example.com",
+                "admin",
+                "pass",
+                user_id=1,
+            )
+
+
+# --- Security: invalid JSON response ---
+
+
+class TestInvalidJsonResponse:
+    @patch("wpa.user.requests.get")
+    def test_list_users_invalid_json(self, mock_get):
+        resp = MagicMock()
+        resp.status_code = 200
+        resp.json.side_effect = ValueError("No JSON")
+        resp.text = "not json"
+        mock_get.return_value = resp
+        with pytest.raises(SystemExit):
+            list_users("https://example.com", "admin", "pass")

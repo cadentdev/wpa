@@ -1,5 +1,26 @@
 # Release Notes
 
+## v0.5.1 — Security Hardening & Refactor (2026-03-21)
+
+### What's New
+
+- **User ID validation** — `update` and `delete` now validate that `user_id` is a positive integer before interpolating into the API URL, preventing path injection via the library interface
+- **Invalid JSON handling** — API responses with valid status codes but malformed JSON now produce a clean error message instead of an unhandled traceback
+- **Response body sanitization** — Non-JSON error responses are stripped of newlines before display
+- **Empty update guard** — `wpa user update` with no field flags now exits with a helpful message instead of sending an empty payload
+- **Internal refactor** — Consolidated duplicated request/error handling into shared `_request()` helper; extracted `_users_endpoint()` to eliminate 4x URL construction
+
+### Quality
+
+- 152 tests (+7 security tests) | ruff clean | bandit clean | pip-audit clean
+
+### Tools Used
+
+- `bandit` — static security analysis (0 findings)
+- `pip-audit` — dependency vulnerability scan (0 findings)
+
+---
+
 ## v0.5.0 — User Management (2026-03-21)
 
 ### What's New
