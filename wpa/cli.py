@@ -373,98 +373,106 @@ def _do_page_delete(args):
 
 def _do_user_list(args):
     """List WordPress users."""
-    site_url, user, password, _admin_path = resolve_config(site_name=args.site)
-
     try:
+        client = WPApiClient.from_config(site_name=args.site)
         fields = validate_user_fields(args.fields)
+        rows = list_users(client, role=args.role, search=args.search)
+
+        if not rows:
+            print("No users found.")
+            return 0
+
+        output = format_output(rows, fields, args.format)
+        print(output, end="" if args.format in ("csv", "tsv") else "")
+        return 0
     except ValueError as e:
         print(f"Error: {e}")
         return 1
-
-    rows = list_users(site_url, user, password, role=args.role, search=args.search)
-
-    if not rows:
-        print("No users found.")
-        return 0
-
-    output = format_output(rows, fields, args.format)
-    print(output, end="" if args.format in ("csv", "tsv") else "")
-    return 0
+    except (WPApiError, WPConnectionError, WPTimeoutError) as e:
+        return _handle_api_error(e)
 
 
 def _do_user_create(args):
     """Create a new WordPress user."""
-    site_url, user, password, _admin_path = resolve_config(site_name=args.site)
+    try:
+        client = WPApiClient.from_config(site_name=args.site)
 
-    # Prompt for password if not provided
-    new_password = args.password
-    if not new_password:
-        new_password = getpass.getpass("Password for new user: ")
+        # Prompt for password if not provided
+        new_password = args.password
         if not new_password:
-            print("Error: Password cannot be empty.")
-            return 1
+            new_password = getpass.getpass("Password for new user: ")
+            if not new_password:
+                print("Error: Password cannot be empty.")
+                return 1
 
-    result = create_user(
-        site_url,
-        user,
-        password,
-        username=args.username,
-        email=args.email,
-        password_new=new_password,
-        role=args.role,
-        first_name=args.first_name,
-        last_name=args.last_name,
-    )
-    print("User created successfully!")
-    print(f"  ID:       {result['id']}")
-    print(f"  Username: {result.get('slug', args.username)}")
-    print(f"  Email:    {result.get('email', args.email)}")
-    return 0
+        result = create_user(
+            client,
+            username=args.username,
+            email=args.email,
+            password_new=new_password,
+            role=args.role,
+            first_name=args.first_name,
+            last_name=args.last_name,
+        )
+        print("User created successfully!")
+        print(f"  ID:       {result['id']}")
+        print(f"  Username: {result.get('slug', args.username)}")
+        print(f"  Email:    {result.get('email', args.email)}")
+        return 0
+    except (WPApiError, WPConnectionError, WPTimeoutError) as e:
+        return _handle_api_error(e)
 
 
 def _do_user_update(args):
     """Update an existing WordPress user."""
-    site_url, user, password, _admin_path = resolve_config(site_name=args.site)
-
-    result = update_user(
-        site_url,
-        user,
-        password,
-        user_id=args.id,
-        email=args.email,
-        role=args.role,
-        first_name=args.first_name,
-        last_name=args.last_name,
-        display_name=args.display_name,
-    )
-    print(f"User {args.id} updated successfully!")
-    print(f"  Display name: {result.get('name', '')}")
-    print(f"  Email:        {result.get('email', '')}")
-    return 0
+    try:
+        client = WPApiClient.from_config(site_name=args.site)
+        result = update_user(
+            client,
+            user_id=args.id,
+            email=args.email,
+            role=args.role,
+            first_name=args.first_name,
+            last_name=args.last_name,
+            display_name=args.display_name,
+        )
+        print(f"User {args.id} updated successfully!")
+        print(f"  Display name: {result.get('name', '')}")
+        print(f"  Email:        {result.get('email', '')}")
+        return 0
+    except ValueError as e:
+        print(f"Error: {e}")
+        return 1
+    except (WPApiError, WPConnectionError, WPTimeoutError) as e:
+        return _handle_api_error(e)
 
 
 def _do_user_delete(args):
     """Delete a WordPress user."""
-    site_url, user, password, _admin_path = resolve_config(site_name=args.site)
+    try:
+        client = WPApiClient.from_config(site_name=args.site)
 
-    if args.reassign is None:
-        print(
-            "Warning: No --reassign specified. "
-            "Posts by this user will be deleted permanently."
+        if args.reassign is None:
+            print(
+                "Warning: No --reassign specified. "
+                "Posts by this user will be deleted permanently."
+            )
+
+        result = delete_user(
+            client,
+            user_id=args.id,
+            reassign=args.reassign,
         )
-
-    result = delete_user(
-        site_url,
-        user,
-        password,
-        user_id=args.id,
-        reassign=args.reassign,
-    )
-    if result.get("deleted"):
-        print(f"User {args.id} deleted successfully.")
-    else:
-        print(f"Unexpected response: {result}")
-    return 0
+        if result.get("deleted"):
+            print(f"User {args.id} deleted successfully.")
+        else:
+            print(f"Unexpected response: {result}")
+        return 0
+    except ValueError as e:
+        print(f"Error: {e}")
+        return 1
+    except (WPApiError, WPConnectionError, WPTimeoutError) as e:
+        return _handle_api_error(e)
 
 
 # --- Shared parser factories ---

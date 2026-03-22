@@ -1,9 +1,5 @@
 """User CRUD operations via WordPress REST API."""
 
-import sys
-
-import requests
-
 # Maps friendly field names to WordPress REST API response keys
 USER_FIELDS = {
     "id": "id",
@@ -48,10 +44,13 @@ def validate_fields(fields_str):
 
 
 def _validate_user_id(user_id):
-    """Validate user_id is a positive integer to prevent path injection."""
+    """Validate user_id is a positive integer.
+
+    Raises:
+        ValueError: If user_id is not a positive integer.
+    """
     if not isinstance(user_id, int) or user_id < 1:
-        print(f"Error: Invalid user ID: {user_id}")
-        sys.exit(1)
+        raise ValueError(f"Invalid user ID: {user_id}")
 
 
 def _extract_user_row(api_user):
@@ -65,66 +64,11 @@ def _extract_user_row(api_user):
     return row
 
 
-def _handle_request_error(e, site_url):
-    """Handle requests library exceptions consistently."""
-    if isinstance(e, requests.ConnectionError):
-        print(
-            f"Error: Could not connect to {site_url}. "
-            "Check the URL and your network connection."
-        )
-    elif isinstance(e, requests.Timeout):
-        print(f"Error: Request to {site_url} timed out after 30 seconds.")
-    else:
-        print(f"Error: Request failed: {e}")
-    sys.exit(1)
-
-
-def _handle_api_error(response):
-    """Handle non-success API responses consistently."""
-    print(f"Error: WordPress API returned {response.status_code}")
-    try:
-        error = response.json()
-        print(f"  Code:    {error.get('code', 'unknown')}")
-        print(f"  Message: {error.get('message', 'unknown')}")
-    except ValueError:
-        # Truncate and sanitize non-JSON response body
-        body = response.text[:200].replace("\n", " ").replace("\r", "")
-        print(f"  Body: {body}")
-    sys.exit(1)
-
-
-def _users_endpoint(site_url):
-    """Return the WordPress users REST API endpoint URL."""
-    return f"{site_url}/wp-json/wp/v2/users"
-
-
-def _request(method, url, site_url, auth, expected_status, **kwargs):
-    """Make an authenticated request and handle errors consistently.
-
-    Returns the parsed JSON response.
-    """
-    try:
-        response = method(url, auth=auth, timeout=30, **kwargs)
-    except requests.RequestException as e:
-        _handle_request_error(e, site_url)
-
-    if response.status_code != expected_status:
-        _handle_api_error(response)
-
-    try:
-        return response.json()
-    except ValueError:
-        print(f"Error: Invalid JSON in response from {site_url}")
-        sys.exit(1)
-
-
-def list_users(site_url, user, password, role=None, search=None):
+def list_users(client, role=None, search=None):
     """Fetch users from WordPress REST API.
 
     Args:
-        site_url: WordPress site URL.
-        user: Username for authentication.
-        password: Application password.
+        client: WPApiClient instance.
         role: Optional role filter.
         search: Optional search term.
 
@@ -137,21 +81,11 @@ def list_users(site_url, user, password, role=None, search=None):
     if search:
         params["search"] = search
 
-    data = _request(
-        requests.get,
-        _users_endpoint(site_url),
-        site_url,
-        auth=(user, password),
-        expected_status=200,
-        params=params,
-    )
-    return [_extract_user_row(u) for u in data]
+    return [_extract_user_row(u) for u in client.get_list("users", params=params)]
 
 
 def create_user(
-    site_url,
-    user,
-    password,
+    client,
     username,
     email,
     password_new,
@@ -162,9 +96,7 @@ def create_user(
     """Create a new WordPress user.
 
     Args:
-        site_url: WordPress site URL.
-        user: Username for authentication.
-        password: Application password.
+        client: WPApiClient instance.
         username: Login name for the new user.
         email: Email address.
         password_new: Password for the new user.
@@ -187,20 +119,11 @@ def create_user(
     if last_name:
         payload["last_name"] = last_name
 
-    return _request(
-        requests.post,
-        _users_endpoint(site_url),
-        site_url,
-        auth=(user, password),
-        expected_status=201,
-        json=payload,
-    )
+    return client.post("users", data=payload)
 
 
 def update_user(
-    site_url,
-    user,
-    password,
+    client,
     user_id,
     email=None,
     role=None,
@@ -211,9 +134,7 @@ def update_user(
     """Update an existing WordPress user.
 
     Args:
-        site_url: WordPress site URL.
-        user: Username for authentication.
-        password: Application password.
+        client: WPApiClient instance.
         user_id: ID of the user to update (must be a positive integer).
         email: New email address.
         role: New role.
@@ -223,6 +144,9 @@ def update_user(
 
     Returns:
         Updated user dict from API response.
+
+    Raises:
+        ValueError: If user_id is invalid or no fields to update.
     """
     _validate_user_id(user_id)
 
@@ -239,34 +163,27 @@ def update_user(
         payload["name"] = display_name
 
     if not payload:
-        print(
-            "Error: No fields to update. Specify at least one of: "
+        raise ValueError(
+            "No fields to update. Specify at least one of: "
             "--email, --role, --first-name, --last-name, --display-name"
         )
-        sys.exit(1)
 
-    return _request(
-        requests.post,
-        f"{_users_endpoint(site_url)}/{user_id}",
-        site_url,
-        auth=(user, password),
-        expected_status=200,
-        json=payload,
-    )
+    return client.post(f"users/{user_id}", data=payload)
 
 
-def delete_user(site_url, user, password, user_id, reassign=None):
+def delete_user(client, user_id, reassign=None):
     """Delete a WordPress user.
 
     Args:
-        site_url: WordPress site URL.
-        user: Username for authentication.
-        password: Application password.
+        client: WPApiClient instance.
         user_id: ID of the user to delete (must be a positive integer).
         reassign: User ID to reassign posts to. If None, posts are deleted.
 
     Returns:
         Deletion response dict from API.
+
+    Raises:
+        ValueError: If user_id is invalid.
     """
     _validate_user_id(user_id)
 
@@ -274,11 +191,4 @@ def delete_user(site_url, user, password, user_id, reassign=None):
     if reassign is not None:
         params["reassign"] = reassign
 
-    return _request(
-        requests.delete,
-        f"{_users_endpoint(site_url)}/{user_id}",
-        site_url,
-        auth=(user, password),
-        expected_status=200,
-        params=params,
-    )
+    return client.delete(f"users/{user_id}", params=params)
