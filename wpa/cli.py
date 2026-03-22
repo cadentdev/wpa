@@ -17,6 +17,14 @@ from wpa.post import (
     update_post,
     validate_fields as validate_post_fields,
 )
+from wpa.page import (
+    create_page,
+    delete_page,
+    get_page,
+    list_pages,
+    update_page,
+    validate_fields as validate_page_fields,
+)
 from wpa.publish import parse_page, publish_page
 from wpa.user import (
     DEFAULT_FIELDS as USER_DEFAULT_FIELDS,
@@ -224,6 +232,135 @@ def _do_post_delete(args):
                 print(f"Unexpected response: {result}")
         else:
             print(f"Post {args.id} moved to trash.")
+        return 0
+    except ValueError as e:
+        print(f"Error: {e}")
+        return 1
+    except (WPApiError, WPConnectionError, WPTimeoutError) as e:
+        return _handle_api_error(e)
+
+
+# --- Page handlers ---
+
+
+def _do_page_list(args):
+    """List WordPress pages."""
+    try:
+        client = WPApiClient.from_config(site_name=args.site, debug=args.debug)
+        fields = validate_page_fields(args.fields)
+        rows = list_pages(
+            client,
+            status=args.status,
+            search=args.search,
+            parent=args.parent,
+            per_page=args.per_page,
+            orderby=args.orderby,
+            order=args.order,
+        )
+        return _format_list_output(rows, fields, args)
+    except ValueError as e:
+        print(f"Error: {e}")
+        return 1
+    except (WPApiError, WPConnectionError, WPTimeoutError) as e:
+        return _handle_api_error(e)
+
+
+def _do_page_get(args):
+    """Get a single WordPress page."""
+    try:
+        client = WPApiClient.from_config(site_name=args.site, debug=args.debug)
+        row = get_page(client, args.id, embed=args.embed)
+
+        if args.format == "json":
+            import json
+
+            print(json.dumps(row, indent=2, ensure_ascii=False))
+        else:
+            for key, value in row.items():
+                print(f"{key}: {value}")
+        return 0
+    except ValueError as e:
+        print(f"Error: {e}")
+        return 1
+    except (WPApiError, WPConnectionError, WPTimeoutError) as e:
+        return _handle_api_error(e)
+
+
+def _do_page_create_dispatch(args):
+    """Dispatch page create — markdown file or CLI flags."""
+    if args.file:
+        return _do_publish(args)
+    if not args.title:
+        print("Error: Provide a markdown file or --title to create a page.")
+        return 1
+    return _do_page_create(args)
+
+
+def _do_page_create(args):
+    """Create a new WordPress page from CLI flags."""
+    try:
+        client = WPApiClient.from_config(site_name=args.site, debug=args.debug)
+        result = create_page(
+            client,
+            title=args.title,
+            content=args.content or "",
+            status=args.status,
+            slug=args.slug,
+            parent=args.parent,
+            author=args.author,
+            menu_order=args.menu_order,
+        )
+        print("Page created successfully!")
+        print(f"  ID:     {result['id']}")
+        print(f"  Status: {result.get('status', 'draft')}")
+        return 0
+    except ValueError as e:
+        print(f"Error: {e}")
+        return 1
+    except (WPApiError, WPConnectionError, WPTimeoutError) as e:
+        return _handle_api_error(e)
+
+
+def _do_page_update(args):
+    """Update an existing WordPress page."""
+    try:
+        client = WPApiClient.from_config(site_name=args.site, debug=args.debug)
+
+        fields = {}
+        if args.title is not None:
+            fields["title"] = args.title
+        if args.content is not None:
+            fields["content"] = args.content
+        if args.status is not None:
+            fields["status"] = args.status
+        if args.slug is not None:
+            fields["slug"] = args.slug
+        if args.parent is not None:
+            fields["parent"] = args.parent
+
+        update_page(client, args.id, **fields)
+        print(f"Page {args.id} updated successfully!")
+        return 0
+    except ValueError as e:
+        print(f"Error: {e}")
+        return 1
+    except (WPApiError, WPConnectionError, WPTimeoutError) as e:
+        return _handle_api_error(e)
+
+
+def _do_page_delete(args):
+    """Delete a WordPress page."""
+    try:
+        client = WPApiClient.from_config(site_name=args.site, debug=args.debug)
+        result = delete_page(client, args.id, force=args.force)
+
+        if args.force:
+            if result.get("deleted"):
+                print(f"Page {args.id} deleted permanently.")
+            else:
+                print(f"Unexpected response: {result}")
+        else:
+            print(f"Page {args.id} moved to trash.")
         return 0
     except ValueError as e:
         print(f"Error: {e}")
@@ -484,16 +621,79 @@ def main(argv=None):
     page_parser = subparsers.add_parser("page", help="Page management commands")
     page_subparsers = page_parser.add_subparsers(dest="page_command")
 
+    # wpa page list
+    page_list_parser = page_subparsers.add_parser(
+        "list", parents=[shared, list_p], help="List pages"
+    )
+    page_list_parser.add_argument(
+        "--status", help="Filter by status (draft, publish, pending, private, trash)"
+    )
+    page_list_parser.add_argument("--search", help="Search pages")
+    page_list_parser.add_argument("--parent", type=int, help="Filter by parent page ID")
+    page_list_parser.add_argument(
+        "--per-page", type=int, default=10, help="Results per page (default: 10)"
+    )
+    page_list_parser.add_argument(
+        "--orderby", help="Sort field (date, title, id, modified, slug, menu_order)"
+    )
+    page_list_parser.add_argument("--order", choices=["asc", "desc"], help="Sort order")
+    page_list_parser.set_defaults(func=_do_page_list)
+
+    # wpa page get <id>
+    page_get_parser = page_subparsers.add_parser(
+        "get", parents=[shared], help="Get a single page"
+    )
+    page_get_parser.add_argument("id", type=int, help="Page ID")
+    page_get_parser.add_argument(
+        "--embed", action="store_true", help="Include linked resources"
+    )
+    page_get_parser.add_argument(
+        "--format", default="table", choices=["table", "json"], help="Output format"
+    )
+    page_get_parser.set_defaults(func=_do_page_get)
+
+    # wpa page create (from flags or markdown file)
     page_create_parser = page_subparsers.add_parser(
-        "create", help="Create a WordPress page from a markdown file"
+        "create", parents=[shared], help="Create a new page"
     )
     page_create_parser.add_argument(
-        "file", help="Path to markdown file with YAML frontmatter"
+        "file",
+        nargs="?",
+        default=None,
+        help="Path to markdown file with YAML frontmatter",
     )
+    page_create_parser.add_argument("--title", help="Page title")
+    page_create_parser.add_argument("--content", help="Page content (HTML)")
     page_create_parser.add_argument(
-        "--site", help="Use named site config from ~/.config/wpa/<name>/"
+        "--status", default="draft", help="Page status (default: draft)"
     )
-    page_create_parser.set_defaults(func=_do_publish)
+    page_create_parser.add_argument("--slug", help="URL slug")
+    page_create_parser.add_argument("--parent", type=int, help="Parent page ID")
+    page_create_parser.add_argument("--author", type=int, help="Author user ID")
+    page_create_parser.add_argument("--menu-order", type=int, help="Menu order")
+    page_create_parser.set_defaults(func=_do_page_create_dispatch)
+
+    # wpa page update <id>
+    page_update_parser = page_subparsers.add_parser(
+        "update", parents=[shared], help="Update an existing page"
+    )
+    page_update_parser.add_argument("id", type=int, help="Page ID to update")
+    page_update_parser.add_argument("--title", help="New title")
+    page_update_parser.add_argument("--content", help="New content (HTML)")
+    page_update_parser.add_argument("--status", help="New status")
+    page_update_parser.add_argument("--slug", help="New URL slug")
+    page_update_parser.add_argument("--parent", type=int, help="New parent page ID")
+    page_update_parser.set_defaults(func=_do_page_update)
+
+    # wpa page delete <id>
+    page_delete_parser = page_subparsers.add_parser(
+        "delete", parents=[shared], help="Delete a page"
+    )
+    page_delete_parser.add_argument("id", type=int, help="Page ID to delete")
+    page_delete_parser.add_argument(
+        "--force", action="store_true", help="Permanently delete (skip trash)"
+    )
+    page_delete_parser.set_defaults(func=_do_page_delete)
 
     # --- wpa site ---
     site_parser = subparsers.add_parser("site", help="Site configuration commands")
