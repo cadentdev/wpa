@@ -19,7 +19,7 @@ from wpa.config import (
     resolve_config,
     validate_site_name,
 )
-from wpa.publish import parse_page, publish_page
+from wpa.publish import parse_markdown, parse_page, publish_page
 from wpa.cli import main
 
 
@@ -1219,3 +1219,33 @@ class TestMain:
         assert "publish" in output
         assert "page" in output
         assert "site" in output
+
+
+class TestParseMarkdown:
+    """Tests for parse_markdown() — the shared markdown parser."""
+
+    def test_returns_dict_with_all_fields(self, tmp_path):
+        md = tmp_path / "test.md"
+        md.write_text("---\ntitle: Hello\nslug: hello\nstatus: draft\n---\nBody text\n")
+        result = parse_markdown(str(md))
+        assert result["title"] == "Hello"
+        assert result["slug"] == "hello"
+        assert result["status"] == "draft"
+        assert "<p>Body text</p>" in result["content"]
+
+    def test_preserves_extra_frontmatter(self, tmp_path):
+        md = tmp_path / "test.md"
+        md.write_text("---\ntitle: Test\ncategories: [3, 5]\nauthor: 2\n---\nContent\n")
+        result = parse_markdown(str(md))
+        assert result["categories"] == [3, 5]
+        assert result["author"] == 2
+
+    def test_backward_compat_with_parse_page(self, tmp_path):
+        md = tmp_path / "test.md"
+        md.write_text("---\ntitle: Compat Test\nstatus: publish\n---\nHello\n")
+        title, slug, status, content = parse_page(str(md))
+        data = parse_markdown(str(md))
+        assert title == data["title"]
+        assert slug == data["slug"]
+        assert status == data["status"]
+        assert content == data["content"]

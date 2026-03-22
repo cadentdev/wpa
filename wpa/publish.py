@@ -10,8 +10,22 @@ import requests
 VALID_STATUSES = {"draft", "publish", "pending", "private"}
 
 
-def parse_page(filepath):
-    """Parse markdown file with YAML frontmatter."""
+def parse_markdown(filepath):
+    """Parse a markdown file with YAML frontmatter.
+
+    Returns a dict with all frontmatter fields plus 'content' (as HTML).
+    Validates that 'title' exists and 'status' is valid.
+
+    Args:
+        filepath: Path to the markdown file.
+
+    Returns:
+        Dict with keys: title, slug, status, content, plus any extra
+        frontmatter fields (categories, tags, author, etc.).
+
+    Raises:
+        SystemExit: If file not found, title missing, or status invalid.
+    """
     path = Path(filepath)
     if not path.exists():
         print(f"Error: File not found: {filepath}")
@@ -29,13 +43,34 @@ def parse_page(filepath):
 
     if status not in VALID_STATUSES:
         print(
-            f"Error: Invalid status '{status}' in {filepath}. Must be one of: {', '.join(sorted(VALID_STATUSES))}"
+            f"Error: Invalid status '{status}' in {filepath}. "
+            f"Must be one of: {', '.join(sorted(VALID_STATUSES))}"
         )
         sys.exit(1)
 
     html_content = markdown.markdown(post.content)
 
-    return title, slug, status, html_content
+    # Build result with all frontmatter fields
+    result = dict(post.metadata)
+    result["title"] = title
+    result["slug"] = slug
+    result["status"] = status
+    result["content"] = html_content
+
+    return result
+
+
+def parse_page(filepath):
+    """Parse markdown file with YAML frontmatter.
+
+    Legacy wrapper around parse_markdown() that returns a 4-tuple
+    for backward compatibility with existing callers.
+
+    Returns:
+        Tuple of (title, slug, status, html_content).
+    """
+    data = parse_markdown(filepath)
+    return data["title"], data["slug"], data["status"], data["content"]
 
 
 def publish_page(
