@@ -5,7 +5,8 @@ from pathlib import Path
 
 import frontmatter
 import markdown
-import requests
+
+from wpa.exceptions import WPApiError, WPConnectionError, WPTimeoutError
 
 VALID_STATUSES = {"draft", "publish", "pending", "private"}
 
@@ -73,12 +74,20 @@ def parse_page(filepath):
     return data["title"], data["slug"], data["status"], data["content"]
 
 
-def publish_page(
-    site_url, user, password, title, slug, status, content, admin_path="wp-admin"
-):
-    """POST a page to WordPress REST API."""
-    endpoint = f"{site_url}/wp-json/wp/v2/pages"
+def publish_page(client, title, slug, status, content, admin_path="wp-admin"):
+    """POST a page to WordPress REST API using WPApiClient.
 
+    Args:
+        client: WPApiClient instance.
+        title: Page title.
+        slug: URL slug.
+        status: Publication status.
+        content: HTML content.
+        admin_path: WordPress admin path (default: wp-admin).
+
+    Returns:
+        0 on success, 1 on error.
+    """
     payload = {
         "title": title,
         "content": content,
@@ -88,40 +97,23 @@ def publish_page(
         payload["slug"] = slug
 
     try:
-        response = requests.post(
-            endpoint,
-            json=payload,
-            auth=(user, password),
-            timeout=30,
-        )
-    except requests.ConnectionError:
-        print(
-            f"Error: Could not connect to {site_url}. Check the URL and your network connection."
-        )
-        return 1
-    except requests.Timeout:
-        print(f"Error: Request to {site_url} timed out after 30 seconds.")
-        return 1
-    except requests.RequestException as e:
-        print(f"Error: Request failed: {e}")
-        return 1
-
-    if response.status_code == 201:
-        data = response.json()
+        data = client.post("pages", data=payload)
         page_id = data["id"]
-        edit_url = f"{site_url}/{admin_path}/post.php?post={page_id}&action=edit"
+        edit_url = f"{client.site_url}/{admin_path}/post.php?post={page_id}&action=edit"
         print("Page created successfully!")
         print(f"  ID:       {page_id}")
         print(f"  Title:    {title}")
         print(f"  Status:   {status}")
         print(f"  Edit URL: {edit_url}")
         return 0
-    else:
-        print(f"Error: WordPress API returned {response.status_code}")
-        try:
-            error = response.json()
-            print(f"  Code:    {error.get('code', 'unknown')}")
-            print(f"  Message: {error.get('message', 'unknown')}")
-        except ValueError:
-            print(f"  Body: {response.text[:200]}")
+    except WPApiError as e:
+        print(f"Error: WordPress API returned {e.status_code}")
+        print(f"  Code:    {e.code}")
+        print(f"  Message: {e.message}")
+        return 1
+    except WPConnectionError as e:
+        print(f"Error: {e}")
+        return 1
+    except WPTimeoutError as e:
+        print(f"Error: {e}")
         return 1

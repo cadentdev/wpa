@@ -81,13 +81,12 @@ def _format_list_output(rows, fields, args):
 
 def _do_publish(args):
     """Publish a markdown file as a WordPress page."""
-    site_url, user, password, admin_path = resolve_config(site_name=args.site)
+    site_url, _user, _password, admin_path = resolve_config(site_name=args.site)
     title, slug, status, content = parse_page(args.file)
+    client = WPApiClient.from_config(site_name=args.site)
 
     print(f"Publishing '{title}' as {status} to {site_url}...")
-    return publish_page(
-        site_url, user, password, title, slug, status, content, admin_path=admin_path
-    )
+    return publish_page(client, title, slug, status, content, admin_path=admin_path)
 
 
 # --- Site handlers ---

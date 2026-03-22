@@ -5,8 +5,6 @@ from pathlib import Path
 from unittest.mock import MagicMock, patch
 
 import pytest
-import requests
-
 import wpa.config as wpa_config
 from wpa.config import (
     _load_env,
@@ -19,6 +17,7 @@ from wpa.config import (
     resolve_config,
     validate_site_name,
 )
+from wpa.exceptions import WPApiError, WPConnectionError, WPTimeoutError
 from wpa.publish import parse_markdown, parse_page, publish_page
 from wpa.cli import main
 
@@ -242,22 +241,19 @@ class TestParsePage:
 
 
 class TestPublishPage:
-    def test_success_returns_zero(self, capsys):
-        """publish_page returns 0 and prints page info on 201."""
-        mock_response = MagicMock()
-        mock_response.status_code = 201
-        mock_response.json.return_value = {"id": 42}
+    @pytest.fixture
+    def mock_client(self):
+        client = MagicMock()
+        client.site_url = "https://example.com"
+        return client
 
-        with patch("requests.post", return_value=mock_response) as mock_post:
-            result = publish_page(
-                "https://example.com",
-                "user",
-                "pass",
-                "Test Title",
-                "test-slug",
-                "draft",
-                "<p>Hello</p>",
-            )
+    def test_success_returns_zero(self, mock_client, capsys):
+        """publish_page returns 0 and prints page info on success."""
+        mock_client.post.return_value = {"id": 42}
+
+        result = publish_page(
+            mock_client, "Test Title", "test-slug", "draft", "<p>Hello</p>"
+        )
 
         assert result == 0
         output = capsys.readouterr().out
@@ -265,171 +261,92 @@ class TestPublishPage:
         assert "edit" in output.lower()
 
         # Verify the POST was called correctly
-        mock_post.assert_called_once()
-        call_kwargs = mock_post.call_args
-        assert call_kwargs.kwargs["auth"] == ("user", "pass")
-        assert call_kwargs.kwargs["json"]["title"] == "Test Title"
-        assert call_kwargs.kwargs["json"]["slug"] == "test-slug"
+        mock_client.post.assert_called_once()
+        data = mock_client.post.call_args[1]["data"]
+        assert data["title"] == "Test Title"
+        assert data["slug"] == "test-slug"
 
-    def test_slug_omitted_when_empty(self):
+    def test_slug_omitted_when_empty(self, mock_client):
         """publish_page does not include slug in payload when empty."""
-        mock_response = MagicMock()
-        mock_response.status_code = 201
-        mock_response.json.return_value = {"id": 1}
+        mock_client.post.return_value = {"id": 1}
 
-        with patch("requests.post", return_value=mock_response) as mock_post:
-            publish_page(
-                "https://example.com",
-                "user",
-                "pass",
-                "Title",
-                "",
-                "draft",
-                "<p>Content</p>",
-            )
+        publish_page(mock_client, "Title", "", "draft", "<p>Content</p>")
 
-        payload = mock_post.call_args.kwargs["json"]
-        assert "slug" not in payload
+        data = mock_client.post.call_args[1]["data"]
+        assert "slug" not in data
 
-    def test_api_error_returns_one(self, capsys):
-        """publish_page returns 1 and prints error on non-201."""
-        mock_response = MagicMock()
-        mock_response.status_code = 403
-        mock_response.json.return_value = {
-            "code": "rest_forbidden",
-            "message": "Sorry, you are not allowed to create posts.",
-        }
+    def test_api_error_returns_one(self, mock_client, capsys):
+        """publish_page returns 1 and prints error on API error."""
+        mock_client.post.side_effect = WPApiError(
+            403, "rest_forbidden", "Sorry, you are not allowed to create posts."
+        )
 
-        with patch("requests.post", return_value=mock_response):
-            result = publish_page(
-                "https://example.com",
-                "user",
-                "pass",
-                "Title",
-                "slug",
-                "draft",
-                "<p>Content</p>",
-            )
+        result = publish_page(mock_client, "Title", "slug", "draft", "<p>Content</p>")
 
         assert result == 1
         output = capsys.readouterr().out
         assert "403" in output
         assert "rest_forbidden" in output
 
-    def test_non_json_error_body(self, capsys):
-        """publish_page handles non-JSON error responses gracefully."""
-        mock_response = MagicMock()
-        mock_response.status_code = 500
-        mock_response.json.side_effect = ValueError("No JSON")
-        mock_response.text = "<html>Internal Server Error</html>"
+    def test_non_json_error_body(self, mock_client, capsys):
+        """publish_page handles WPApiError with non-JSON details."""
+        mock_client.post.side_effect = WPApiError(
+            500, "unknown", "Internal Server Error"
+        )
 
-        with patch("requests.post", return_value=mock_response):
-            result = publish_page(
-                "https://example.com",
-                "user",
-                "pass",
-                "Title",
-                "slug",
-                "draft",
-                "<p>Content</p>",
-            )
+        result = publish_page(mock_client, "Title", "slug", "draft", "<p>Content</p>")
 
         assert result == 1
         output = capsys.readouterr().out
         assert "500" in output
         assert "Internal Server Error" in output
 
-    def test_connection_error_returns_one(self, capsys):
+    def test_connection_error_returns_one(self, mock_client, capsys):
         """publish_page returns 1 on connection failure."""
-        with patch("requests.post", side_effect=requests.ConnectionError("DNS failed")):
-            result = publish_page(
-                "https://example.com",
-                "user",
-                "pass",
-                "Title",
-                "slug",
-                "draft",
-                "<p>Content</p>",
-            )
+        mock_client.post.side_effect = WPConnectionError(
+            "Could not connect to https://example.com"
+        )
+
+        result = publish_page(mock_client, "Title", "slug", "draft", "<p>Content</p>")
 
         assert result == 1
         output = capsys.readouterr().out
         assert "Could not connect" in output
 
-    def test_timeout_returns_one(self, capsys):
+    def test_timeout_returns_one(self, mock_client, capsys):
         """publish_page returns 1 on request timeout."""
-        with patch("requests.post", side_effect=requests.Timeout("timed out")):
-            result = publish_page(
-                "https://example.com",
-                "user",
-                "pass",
-                "Title",
-                "slug",
-                "draft",
-                "<p>Content</p>",
-            )
+        mock_client.post.side_effect = WPTimeoutError(
+            "Request timed out after 30 seconds"
+        )
+
+        result = publish_page(mock_client, "Title", "slug", "draft", "<p>Content</p>")
 
         assert result == 1
         output = capsys.readouterr().out
         assert "timed out" in output
 
-    def test_generic_request_error_returns_one(self, capsys):
-        """publish_page returns 1 on generic RequestException."""
-        with patch(
-            "requests.post", side_effect=requests.RequestException("something broke")
-        ):
-            result = publish_page(
-                "https://example.com",
-                "user",
-                "pass",
-                "Title",
-                "slug",
-                "draft",
-                "<p>Content</p>",
-            )
-
-        assert result == 1
-        output = capsys.readouterr().out
-        assert "Request failed" in output
-
-    def test_custom_admin_path_in_edit_url(self, capsys):
+    def test_custom_admin_path_in_edit_url(self, mock_client, capsys):
         """publish_page uses custom admin_path in edit URL."""
-        mock_response = MagicMock()
-        mock_response.status_code = 201
-        mock_response.json.return_value = {"id": 42}
+        mock_client.post.return_value = {"id": 42}
 
-        with patch("requests.post", return_value=mock_response):
-            result = publish_page(
-                "https://example.com",
-                "user",
-                "pass",
-                "Title",
-                "slug",
-                "draft",
-                "<p>Content</p>",
-                admin_path="secret-admin",
-            )
+        result = publish_page(
+            mock_client,
+            "Title",
+            "slug",
+            "draft",
+            "<p>Content</p>",
+            admin_path="secret-admin",
+        )
 
         assert result == 0
         output = capsys.readouterr().out
         assert "secret-admin/post.php" in output
 
-    def test_default_admin_path(self, capsys):
+    def test_default_admin_path(self, mock_client, capsys):
         """publish_page defaults to wp-admin in edit URL."""
-        mock_response = MagicMock()
-        mock_response.status_code = 201
-        mock_response.json.return_value = {"id": 42}
+        mock_client.post.return_value = {"id": 42}
 
-        with patch("requests.post", return_value=mock_response):
-            result = publish_page(
-                "https://example.com",
-                "user",
-                "pass",
-                "Title",
-                "slug",
-                "draft",
-                "<p>Content</p>",
-            )
+        result = publish_page(mock_client, "Title", "slug", "draft", "<p>Content</p>")
 
         assert result == 0
         output = capsys.readouterr().out
@@ -1159,11 +1076,11 @@ class TestMain:
         monkeypatch.delenv("WP_APP_PASSWORD", raising=False)
         monkeypatch.delenv("WP_ADMIN_PATH", raising=False)
 
-        mock_response = MagicMock()
-        mock_response.status_code = 201
-        mock_response.json.return_value = {"id": 99}
+        mock_client = MagicMock()
+        mock_client.site_url = "https://example.com"
+        mock_client.post.return_value = {"id": 99}
 
-        with patch("requests.post", return_value=mock_response):
+        with patch("wpa.cli.WPApiClient.from_config", return_value=mock_client):
             result = main(["publish", "--site", "demo", str(valid_md_file)])
 
         assert result == 0
@@ -1175,11 +1092,11 @@ class TestMain:
         monkeypatch.delenv("WP_APP_PASSWORD", raising=False)
         monkeypatch.delenv("WP_ADMIN_PATH", raising=False)
 
-        mock_response = MagicMock()
-        mock_response.status_code = 201
-        mock_response.json.return_value = {"id": 99}
+        mock_client = MagicMock()
+        mock_client.site_url = "https://example.com"
+        mock_client.post.return_value = {"id": 99}
 
-        with patch("requests.post", return_value=mock_response):
+        with patch("wpa.cli.WPApiClient.from_config", return_value=mock_client):
             result = main(["page", "create", "--site", "demo", str(valid_md_file)])
 
         assert result == 0
