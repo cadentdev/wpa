@@ -12,7 +12,6 @@ from wpa.config import (
     get_config_dir,
     is_private_url,
     list_sites,
-    load_config,
     migrate_repo_env,
     resolve_config,
     validate_site_name,
@@ -109,77 +108,6 @@ def multi_site(xdg_config):
             "WP_ADMIN_PATH=wp-admin\n"
         )
     return xdg_config
-
-
-# ---------------------------------------------------------------------------
-# load_config tests (legacy interface)
-# ---------------------------------------------------------------------------
-
-
-class TestLoadConfig:
-    def test_missing_env_file_exits(self, tmp_path, monkeypatch):
-        """load_config exits 1 when .env file doesn't exist."""
-        monkeypatch.setattr(wpa_config, "__file__", str(tmp_path / "wpa" / "config.py"))
-        with pytest.raises(SystemExit) as exc_info:
-            load_config(env_path=str(tmp_path / ".env"))
-        assert exc_info.value.code == 1
-
-    def test_incomplete_env_vars_exits(self, tmp_path, monkeypatch):
-        """load_config exits 1 when env vars are incomplete."""
-        env = tmp_path / ".env"
-        env.write_text("WP_SITE_URL=https://example.com\n")
-        monkeypatch.setattr(wpa_config, "__file__", str(tmp_path / "wpa" / "config.py"))
-        # Clear any pre-existing vars
-        monkeypatch.delenv("WP_USER", raising=False)
-        monkeypatch.delenv("WP_APP_PASSWORD", raising=False)
-        with pytest.raises(SystemExit) as exc_info:
-            load_config(env_path=str(env))
-        assert exc_info.value.code == 1
-
-    def test_valid_env_returns_config(self, valid_env_file, monkeypatch):
-        """load_config returns (site_url, user, password) from valid .env."""
-        monkeypatch.setattr(
-            wpa_config, "__file__", str(valid_env_file / "wpa" / "config.py")
-        )
-        # Clear env to ensure load_dotenv does the work
-        monkeypatch.delenv("WP_SITE_URL", raising=False)
-        monkeypatch.delenv("WP_USER", raising=False)
-        monkeypatch.delenv("WP_APP_PASSWORD", raising=False)
-        site_url, user, password = load_config(env_path=str(valid_env_file / ".env"))
-        assert site_url == "https://example.com"
-        assert user == "testuser"
-        assert password == "xxxx xxxx xxxx xxxx"
-
-    def test_http_url_rejected(self, tmp_path, monkeypatch):
-        """load_config exits 1 when site URL uses HTTP instead of HTTPS."""
-        env = tmp_path / ".env"
-        env.write_text(
-            "WP_SITE_URL=http://example.com\n"
-            "WP_USER=testuser\n"
-            "WP_APP_PASSWORD=testpass\n"
-        )
-        monkeypatch.setattr(wpa_config, "__file__", str(tmp_path / "wpa" / "config.py"))
-        monkeypatch.delenv("WP_SITE_URL", raising=False)
-        monkeypatch.delenv("WP_USER", raising=False)
-        monkeypatch.delenv("WP_APP_PASSWORD", raising=False)
-        with pytest.raises(SystemExit) as exc_info:
-            load_config(env_path=str(env))
-        assert exc_info.value.code == 1
-
-    def test_trailing_slash_stripped(self, tmp_path, monkeypatch):
-        """load_config strips trailing slash from site URL."""
-        env = tmp_path / ".env"
-        env.write_text(
-            "WP_SITE_URL=https://example.com/\n"
-            "WP_USER=testuser\n"
-            "WP_APP_PASSWORD=testpass\n"
-        )
-        monkeypatch.setattr(wpa_config, "__file__", str(tmp_path / "wpa" / "config.py"))
-        monkeypatch.delenv("WP_SITE_URL", raising=False)
-        monkeypatch.delenv("WP_USER", raising=False)
-        monkeypatch.delenv("WP_APP_PASSWORD", raising=False)
-        site_url, _, _ = load_config(env_path=str(env))
-        assert site_url == "https://example.com"
 
 
 # ---------------------------------------------------------------------------

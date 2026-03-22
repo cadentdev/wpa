@@ -34,6 +34,7 @@ class WPApiClient:
         self.app_password = app_password
         self.timeout = timeout
         self.debug = debug
+        self.admin_path = "wp-admin"
 
     @classmethod
     def from_config(cls, site_name=None, debug=False):
@@ -46,10 +47,12 @@ class WPApiClient:
         Returns:
             WPApiClient instance.
         """
-        site_url, username, app_password, _admin_path = resolve_config(
+        site_url, username, app_password, admin_path = resolve_config(
             site_name=site_name
         )
-        return cls(site_url, username, app_password, debug=debug)
+        client = cls(site_url, username, app_password, debug=debug)
+        client.admin_path = admin_path
+        return client
 
     def _url(self, endpoint):
         """Build full REST API URL.

@@ -2,11 +2,12 @@
 
 import argparse
 import getpass
+import json
 import sys
 
 from wpa import __version__
 from wpa.api import WPApiClient
-from wpa.config import create_site_config, list_sites, resolve_config
+from wpa.config import create_site_config, list_sites
 from wpa.exceptions import WPApiError, WPConnectionError, WPTimeoutError
 from wpa.formatter import format_count, format_field, format_ids, format_output
 from wpa.post import (
@@ -81,12 +82,13 @@ def _format_list_output(rows, fields, args):
 
 def _do_publish(args):
     """Publish a markdown file as a WordPress page."""
-    site_url, _user, _password, admin_path = resolve_config(site_name=args.site)
     title, slug, status, content = parse_page(args.file)
     client = WPApiClient.from_config(site_name=args.site)
 
-    print(f"Publishing '{title}' as {status} to {site_url}...")
-    return publish_page(client, title, slug, status, content, admin_path=admin_path)
+    print(f"Publishing '{title}' as {status} to {client.site_url}...")
+    return publish_page(
+        client, title, slug, status, content, admin_path=client.admin_path
+    )
 
 
 # --- Site handlers ---
@@ -143,8 +145,6 @@ def _do_post_get(args):
         row = get_post(client, args.id, embed=args.embed)
 
         if args.format == "json":
-            import json
-
             print(json.dumps(row, indent=2, ensure_ascii=False))
         else:
             for key, value in row.items():
@@ -271,8 +271,6 @@ def _do_page_get(args):
         row = get_page(client, args.id, embed=args.embed)
 
         if args.format == "json":
-            import json
-
             print(json.dumps(row, indent=2, ensure_ascii=False))
         else:
             for key, value in row.items():
