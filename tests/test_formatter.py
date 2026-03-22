@@ -6,7 +6,13 @@ import json
 
 import pytest
 
-from wpa.formatter import format_output, VALID_FORMATS
+from wpa.formatter import (
+    format_count,
+    format_field,
+    format_ids,
+    format_output,
+    VALID_FORMATS,
+)
 
 
 # --- Sample data ---
@@ -181,3 +187,52 @@ class TestEdgeCases:
 
     def test_valid_formats_constant(self):
         assert VALID_FORMATS == {"table", "json", "csv", "tsv"}
+
+
+class TestFormatIds:
+    def test_basic(self):
+        result = format_ids(SAMPLE_ROWS)
+        assert result == "1 2 3"
+
+    def test_empty_list(self):
+        assert format_ids([]) == ""
+
+    def test_single_row(self):
+        assert format_ids([{"id": 42}]) == "42"
+
+    def test_missing_id_key(self):
+        rows = [{"name": "foo"}, {"id": 5}]
+        assert format_ids(rows) == " 5"
+
+
+class TestFormatCount:
+    def test_basic(self):
+        assert format_count(SAMPLE_ROWS) == "3"
+
+    def test_empty_list(self):
+        assert format_count([]) == "0"
+
+    def test_single_row(self):
+        assert format_count([{"id": 1}]) == "1"
+
+
+class TestFormatField:
+    def test_basic(self):
+        result = format_field(SAMPLE_ROWS, "username")
+        assert result == "admin\neditor\njane"
+
+    def test_empty_list(self):
+        assert format_field([], "username") == ""
+
+    def test_missing_field(self):
+        result = format_field(SAMPLE_ROWS, "nonexistent")
+        assert result == "\n\n"
+
+    def test_single_row(self):
+        result = format_field([{"email": "a@b.com"}], "email")
+        assert result == "a@b.com"
+
+    def test_numeric_values(self):
+        rows = [{"id": 1}, {"id": 2}]
+        result = format_field(rows, "id")
+        assert result == "1\n2"
