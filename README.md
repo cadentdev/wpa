@@ -39,44 +39,6 @@ This prompts for your WordPress URL, username, application password (hidden), an
 
 ## Usage
 
-### Publish pages
-
-```bash
-# Publish a page (auto-selects site if only one config exists)
-wpa publish pages/your-page.md
-
-# Specify which site to use
-wpa publish --site mysite pages/your-page.md
-```
-
-### Manage users
-
-```bash
-# List all users
-wpa user list --site mysite
-
-# List users as JSON, specific fields only
-wpa user list --site mysite --format json --fields id,username,email,roles
-
-# Export users to TSV
-wpa user list --site mysite --format tsv > users.tsv
-
-# Filter by role or search term
-wpa user list --site mysite --role editor
-wpa user list --site mysite --search "jane"
-
-# Create a user
-wpa user create --site mysite --username jdoe --email jdoe@example.com --role author
-
-# Update a user
-wpa user update 42 --site mysite --email newemail@example.com --role editor
-
-# Delete a user (reassign their posts to user 1)
-wpa user delete 42 --site mysite --reassign 1
-```
-
-Output formats: `table` (default), `json`, `csv`, `tsv`. Use `--fields` to select columns (available: `id`, `username`, `email`, `first_name`, `last_name`, `display_name`, `roles`, `registered`, `url`).
-
 ### Manage posts
 
 ```bash
@@ -116,6 +78,9 @@ wpa page create --site mysite pages/about.md
 # Create a page from flags
 wpa page create --site mysite --title "About" --content "<p>About us</p>"
 
+# Publish shortcut (equivalent to wpa page create with markdown)
+wpa publish pages/your-page.md --site mysite
+
 # Update a page
 wpa page update 42 --site mysite --title "New Title" --parent 10
 
@@ -123,12 +88,33 @@ wpa page update 42 --site mysite --title "New Title" --parent 10
 wpa page delete 42 --site mysite
 ```
 
-### Publish pages (shortcut)
+### Manage users
 
 ```bash
-# Shortcut for page creation from markdown (same as wpa page create)
-wpa publish pages/your-page.md --site mysite
+# List all users
+wpa user list --site mysite
+
+# List users as JSON, specific fields only
+wpa user list --site mysite --format json --fields id,username,email,roles
+
+# Export users to TSV
+wpa user list --site mysite --format tsv > users.tsv
+
+# Filter by role or search term
+wpa user list --site mysite --role editor
+wpa user list --site mysite --search "jane"
+
+# Create a user
+wpa user create --site mysite --username jdoe --email jdoe@example.com --role author
+
+# Update a user
+wpa user update 42 --site mysite --email newemail@example.com --role editor
+
+# Delete a user (reassign their posts to user 1)
+wpa user delete 42 --site mysite --reassign 1
 ```
+
+Output formats: `table` (default), `json`, `csv`, `tsv`. Use `--fields` to select columns (available: `id`, `username`, `email`, `first_name`, `last_name`, `display_name`, `roles`, `registered`, `url`).
 
 ### Output options
 

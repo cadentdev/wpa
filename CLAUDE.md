@@ -45,6 +45,8 @@ CI runs on ubuntu/macos/windows across Python 3.9, 3.11, 3.12, 3.13. The require
 - `user.py` — User CRUD operations against `/wp-json/wp/v2/users`. Uses `WPApiClient` for all requests
 - `formatter.py` — Shared output formatting (table, json, csv, tsv) with column selection via `--fields`, plus `--ids`, `--count`, `--field` output modifiers
 
+**Global flags**: `--debug` (HTTP request/response details) available on all commands. `--site` selects a named site config.
+
 **Tests**: All in `tests/` (272 tests), use `unittest.mock` to mock HTTP requests. No live WordPress connection needed.
 
 ## Key Conventions
