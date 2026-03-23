@@ -4,7 +4,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## What This Is
 
-WPA is a Python CLI tool for WordPress automation via the REST API. It publishes markdown files as WordPress pages and manages users. Distributed on PyPI as `wpa`.
+WPA is a Python CLI tool for WordPress automation via the REST API. It manages posts, pages, and users. Distributed on PyPI as `wpa`.
 
 WPA is a client-side automation tool (not a wp-cli replacement). It covers the subset of WordPress management exposed by the REST API — primarily content and user management. Command names follow wp-cli conventions where possible (`wp post list` → `wpa post list`).
 
@@ -14,7 +14,7 @@ WPA is a client-side automation tool (not a wp-cli replacement). It covers the s
 # Install for development
 pip install -e '.[dev]'
 
-# Run all tests with coverage (99% coverage required)
+# Run all tests with coverage
 pytest --cov=wpa --cov-report=term-missing
 
 # Run a single test file
@@ -32,16 +32,20 @@ CI runs on ubuntu/macos/windows across Python 3.9, 3.11, 3.12, 3.13. The require
 
 ## Architecture
 
-**Entry point**: `wpa/cli.py` — argparse-based CLI with subcommands (`publish`, `page create`, `site add/list`, `user list/create/update/delete`).
+**Entry point**: `wpa/cli.py` — argparse-based CLI with subcommands (`publish`, `post list/get/create/update/delete`, `page list/get/create/update/delete`, `site add/list`, `user list/create/update/delete`).
 
 **Modules**:
 - `cli.py` — Command parsing, dispatches to other modules
+- `api.py` — Shared REST client (`WPApiClient`). All HTTP requests go through this module — only module that imports `requests`
 - `config.py` — Site credential management using XDG_CONFIG_HOME (`~/.config/wpa/<site>/.env`). Enforces HTTPS for public IPs, allows HTTP for private networks and local TLDs (`.lan`, `.local`, `.test`, `.internal`)
-- `publish.py` — Parses YAML frontmatter from markdown files, converts to HTML, POSTs to `/wp-json/wp/v2/pages`. Default status is `draft`
-- `user.py` — CRUD operations against `/wp-json/wp/v2/users`. Has field mapping (e.g., `slug` → `username`), user ID validation, consolidated request/error handling
-- `formatter.py` — Shared output formatting (table, json, csv, tsv) with column selection via `--fields`
+- `exceptions.py` — Custom exceptions (`WPApiError`, `WPConnectionError`, `WPTimeoutError`) replacing `sys.exit(1)` pattern
+- `post.py` — Post CRUD operations against `/wp-json/wp/v2/posts`. Supports filtering by status, author, category, tag, search
+- `page.py` — Page CRUD operations against `/wp-json/wp/v2/pages`. Supports filtering by status, search, parent
+- `publish.py` — Parses YAML frontmatter from markdown files, converts to HTML, creates pages via `WPApiClient`. Default status is `draft`
+- `user.py` — User CRUD operations against `/wp-json/wp/v2/users`. Uses `WPApiClient` for all requests
+- `formatter.py` — Shared output formatting (table, json, csv, tsv) with column selection via `--fields`, plus `--ids`, `--count`, `--field` output modifiers
 
-**Tests**: All in `tests/`, use `unittest.mock` to mock HTTP requests. No live WordPress connection needed.
+**Tests**: All in `tests/` (272 tests), use `unittest.mock` to mock HTTP requests. No live WordPress connection needed.
 
 ## Key Conventions
 

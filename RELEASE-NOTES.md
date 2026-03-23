@@ -1,5 +1,27 @@
 # Release Notes
 
+## v0.6.0 — API Client Layer + Post/Page CRUD (DRAFT)
+
+### What's New
+
+- **Shared API client** (`WPApiClient`) — All HTTP requests now go through a single, centralized REST client in `api.py`. Only `api.py` imports `requests`. Custom exceptions (`WPApiError`, `WPConnectionError`, `WPTimeoutError`) replace the old `sys.exit(1)` error pattern.
+- **`wpa post` subcommand** — Full CRUD for WordPress posts: `list`, `get`, `create`, `update`, `delete`. Rich filtering with `--status`, `--author`, `--category`, `--tag`, `--search`, `--orderby`, `--order`, `--per-page`.
+- **`wpa page` expansion** — Full CRUD for pages: `list`, `get`, `create`, `update`, `delete`. Filtering with `--status`, `--search`, `--parent`, `--orderby`, `--order`. Page create accepts markdown files or `--title`/`--content` flags.
+- **Formatter extensions** — New output modifiers across all list commands: `--ids` (output only IDs), `--count` (output only count), `--field` (output a single field per result).
+- **`--debug` flag** — Available on all commands, prints HTTP request/response details for troubleshooting.
+- **Module refactor** — `publish.py` and `user.py` refactored to use `WPApiClient`. Dead code removed, double config load fixed.
+
+### Quality
+
+- 272 tests (+120 from v0.5.1) | 75% coverage | ruff clean | bandit clean | pip-audit clean
+- Coverage note: `cli.py` argparse wiring is 44% covered — business logic modules are 91-100%
+
+### Closes
+
+- #21 — API client layer + post/page CRUD
+
+---
+
 ## v0.5.1 — Security Hardening & Refactor (2026-03-21)
 
 ### What's New
