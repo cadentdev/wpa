@@ -1,6 +1,6 @@
 # Release Notes
 
-## v0.6.0 — API Client Layer + Post/Page CRUD (DRAFT)
+## v0.6.0 — API Client Layer + Post/Page CRUD (2026-03-23)
 
 ### What's New
 
