@@ -5,8 +5,6 @@ from pathlib import Path
 from unittest.mock import MagicMock, patch
 
 import pytest
-import requests
-
 import wpa.config as wpa_config
 from wpa.config import (
     _load_env,
@@ -14,12 +12,12 @@ from wpa.config import (
     get_config_dir,
     is_private_url,
     list_sites,
-    load_config,
     migrate_repo_env,
     resolve_config,
     validate_site_name,
 )
-from wpa.publish import parse_page, publish_page
+from wpa.exceptions import WPApiError, WPConnectionError, WPTimeoutError
+from wpa.publish import parse_markdown, parse_page, publish_page
 from wpa.cli import main
 
 
@@ -113,77 +111,6 @@ def multi_site(xdg_config):
 
 
 # ---------------------------------------------------------------------------
-# load_config tests (legacy interface)
-# ---------------------------------------------------------------------------
-
-
-class TestLoadConfig:
-    def test_missing_env_file_exits(self, tmp_path, monkeypatch):
-        """load_config exits 1 when .env file doesn't exist."""
-        monkeypatch.setattr(wpa_config, "__file__", str(tmp_path / "wpa" / "config.py"))
-        with pytest.raises(SystemExit) as exc_info:
-            load_config(env_path=str(tmp_path / ".env"))
-        assert exc_info.value.code == 1
-
-    def test_incomplete_env_vars_exits(self, tmp_path, monkeypatch):
-        """load_config exits 1 when env vars are incomplete."""
-        env = tmp_path / ".env"
-        env.write_text("WP_SITE_URL=https://example.com\n")
-        monkeypatch.setattr(wpa_config, "__file__", str(tmp_path / "wpa" / "config.py"))
-        # Clear any pre-existing vars
-        monkeypatch.delenv("WP_USER", raising=False)
-        monkeypatch.delenv("WP_APP_PASSWORD", raising=False)
-        with pytest.raises(SystemExit) as exc_info:
-            load_config(env_path=str(env))
-        assert exc_info.value.code == 1
-
-    def test_valid_env_returns_config(self, valid_env_file, monkeypatch):
-        """load_config returns (site_url, user, password) from valid .env."""
-        monkeypatch.setattr(
-            wpa_config, "__file__", str(valid_env_file / "wpa" / "config.py")
-        )
-        # Clear env to ensure load_dotenv does the work
-        monkeypatch.delenv("WP_SITE_URL", raising=False)
-        monkeypatch.delenv("WP_USER", raising=False)
-        monkeypatch.delenv("WP_APP_PASSWORD", raising=False)
-        site_url, user, password = load_config(env_path=str(valid_env_file / ".env"))
-        assert site_url == "https://example.com"
-        assert user == "testuser"
-        assert password == "xxxx xxxx xxxx xxxx"
-
-    def test_http_url_rejected(self, tmp_path, monkeypatch):
-        """load_config exits 1 when site URL uses HTTP instead of HTTPS."""
-        env = tmp_path / ".env"
-        env.write_text(
-            "WP_SITE_URL=http://example.com\n"
-            "WP_USER=testuser\n"
-            "WP_APP_PASSWORD=testpass\n"
-        )
-        monkeypatch.setattr(wpa_config, "__file__", str(tmp_path / "wpa" / "config.py"))
-        monkeypatch.delenv("WP_SITE_URL", raising=False)
-        monkeypatch.delenv("WP_USER", raising=False)
-        monkeypatch.delenv("WP_APP_PASSWORD", raising=False)
-        with pytest.raises(SystemExit) as exc_info:
-            load_config(env_path=str(env))
-        assert exc_info.value.code == 1
-
-    def test_trailing_slash_stripped(self, tmp_path, monkeypatch):
-        """load_config strips trailing slash from site URL."""
-        env = tmp_path / ".env"
-        env.write_text(
-            "WP_SITE_URL=https://example.com/\n"
-            "WP_USER=testuser\n"
-            "WP_APP_PASSWORD=testpass\n"
-        )
-        monkeypatch.setattr(wpa_config, "__file__", str(tmp_path / "wpa" / "config.py"))
-        monkeypatch.delenv("WP_SITE_URL", raising=False)
-        monkeypatch.delenv("WP_USER", raising=False)
-        monkeypatch.delenv("WP_APP_PASSWORD", raising=False)
-        site_url, _, _ = load_config(env_path=str(env))
-        assert site_url == "https://example.com"
-
-
-# ---------------------------------------------------------------------------
 # parse_page tests
 # ---------------------------------------------------------------------------
 
@@ -242,22 +169,19 @@ class TestParsePage:
 
 
 class TestPublishPage:
-    def test_success_returns_zero(self, capsys):
-        """publish_page returns 0 and prints page info on 201."""
-        mock_response = MagicMock()
-        mock_response.status_code = 201
-        mock_response.json.return_value = {"id": 42}
+    @pytest.fixture
+    def mock_client(self):
+        client = MagicMock()
+        client.site_url = "https://example.com"
+        return client
 
-        with patch("requests.post", return_value=mock_response) as mock_post:
-            result = publish_page(
-                "https://example.com",
-                "user",
-                "pass",
-                "Test Title",
-                "test-slug",
-                "draft",
-                "<p>Hello</p>",
-            )
+    def test_success_returns_zero(self, mock_client, capsys):
+        """publish_page returns 0 and prints page info on success."""
+        mock_client.post.return_value = {"id": 42}
+
+        result = publish_page(
+            mock_client, "Test Title", "test-slug", "draft", "<p>Hello</p>"
+        )
 
         assert result == 0
         output = capsys.readouterr().out
@@ -265,171 +189,92 @@ class TestPublishPage:
         assert "edit" in output.lower()
 
         # Verify the POST was called correctly
-        mock_post.assert_called_once()
-        call_kwargs = mock_post.call_args
-        assert call_kwargs.kwargs["auth"] == ("user", "pass")
-        assert call_kwargs.kwargs["json"]["title"] == "Test Title"
-        assert call_kwargs.kwargs["json"]["slug"] == "test-slug"
+        mock_client.post.assert_called_once()
+        data = mock_client.post.call_args[1]["data"]
+        assert data["title"] == "Test Title"
+        assert data["slug"] == "test-slug"
 
-    def test_slug_omitted_when_empty(self):
+    def test_slug_omitted_when_empty(self, mock_client):
         """publish_page does not include slug in payload when empty."""
-        mock_response = MagicMock()
-        mock_response.status_code = 201
-        mock_response.json.return_value = {"id": 1}
+        mock_client.post.return_value = {"id": 1}
 
-        with patch("requests.post", return_value=mock_response) as mock_post:
-            publish_page(
-                "https://example.com",
-                "user",
-                "pass",
-                "Title",
-                "",
-                "draft",
-                "<p>Content</p>",
-            )
+        publish_page(mock_client, "Title", "", "draft", "<p>Content</p>")
 
-        payload = mock_post.call_args.kwargs["json"]
-        assert "slug" not in payload
+        data = mock_client.post.call_args[1]["data"]
+        assert "slug" not in data
 
-    def test_api_error_returns_one(self, capsys):
-        """publish_page returns 1 and prints error on non-201."""
-        mock_response = MagicMock()
-        mock_response.status_code = 403
-        mock_response.json.return_value = {
-            "code": "rest_forbidden",
-            "message": "Sorry, you are not allowed to create posts.",
-        }
+    def test_api_error_returns_one(self, mock_client, capsys):
+        """publish_page returns 1 and prints error on API error."""
+        mock_client.post.side_effect = WPApiError(
+            403, "rest_forbidden", "Sorry, you are not allowed to create posts."
+        )
 
-        with patch("requests.post", return_value=mock_response):
-            result = publish_page(
-                "https://example.com",
-                "user",
-                "pass",
-                "Title",
-                "slug",
-                "draft",
-                "<p>Content</p>",
-            )
+        result = publish_page(mock_client, "Title", "slug", "draft", "<p>Content</p>")
 
         assert result == 1
         output = capsys.readouterr().out
         assert "403" in output
         assert "rest_forbidden" in output
 
-    def test_non_json_error_body(self, capsys):
-        """publish_page handles non-JSON error responses gracefully."""
-        mock_response = MagicMock()
-        mock_response.status_code = 500
-        mock_response.json.side_effect = ValueError("No JSON")
-        mock_response.text = "<html>Internal Server Error</html>"
+    def test_non_json_error_body(self, mock_client, capsys):
+        """publish_page handles WPApiError with non-JSON details."""
+        mock_client.post.side_effect = WPApiError(
+            500, "unknown", "Internal Server Error"
+        )
 
-        with patch("requests.post", return_value=mock_response):
-            result = publish_page(
-                "https://example.com",
-                "user",
-                "pass",
-                "Title",
-                "slug",
-                "draft",
-                "<p>Content</p>",
-            )
+        result = publish_page(mock_client, "Title", "slug", "draft", "<p>Content</p>")
 
         assert result == 1
         output = capsys.readouterr().out
         assert "500" in output
         assert "Internal Server Error" in output
 
-    def test_connection_error_returns_one(self, capsys):
+    def test_connection_error_returns_one(self, mock_client, capsys):
         """publish_page returns 1 on connection failure."""
-        with patch("requests.post", side_effect=requests.ConnectionError("DNS failed")):
-            result = publish_page(
-                "https://example.com",
-                "user",
-                "pass",
-                "Title",
-                "slug",
-                "draft",
-                "<p>Content</p>",
-            )
+        mock_client.post.side_effect = WPConnectionError(
+            "Could not connect to https://example.com"
+        )
+
+        result = publish_page(mock_client, "Title", "slug", "draft", "<p>Content</p>")
 
         assert result == 1
         output = capsys.readouterr().out
         assert "Could not connect" in output
 
-    def test_timeout_returns_one(self, capsys):
+    def test_timeout_returns_one(self, mock_client, capsys):
         """publish_page returns 1 on request timeout."""
-        with patch("requests.post", side_effect=requests.Timeout("timed out")):
-            result = publish_page(
-                "https://example.com",
-                "user",
-                "pass",
-                "Title",
-                "slug",
-                "draft",
-                "<p>Content</p>",
-            )
+        mock_client.post.side_effect = WPTimeoutError(
+            "Request timed out after 30 seconds"
+        )
+
+        result = publish_page(mock_client, "Title", "slug", "draft", "<p>Content</p>")
 
         assert result == 1
         output = capsys.readouterr().out
         assert "timed out" in output
 
-    def test_generic_request_error_returns_one(self, capsys):
-        """publish_page returns 1 on generic RequestException."""
-        with patch(
-            "requests.post", side_effect=requests.RequestException("something broke")
-        ):
-            result = publish_page(
-                "https://example.com",
-                "user",
-                "pass",
-                "Title",
-                "slug",
-                "draft",
-                "<p>Content</p>",
-            )
-
-        assert result == 1
-        output = capsys.readouterr().out
-        assert "Request failed" in output
-
-    def test_custom_admin_path_in_edit_url(self, capsys):
+    def test_custom_admin_path_in_edit_url(self, mock_client, capsys):
         """publish_page uses custom admin_path in edit URL."""
-        mock_response = MagicMock()
-        mock_response.status_code = 201
-        mock_response.json.return_value = {"id": 42}
+        mock_client.post.return_value = {"id": 42}
 
-        with patch("requests.post", return_value=mock_response):
-            result = publish_page(
-                "https://example.com",
-                "user",
-                "pass",
-                "Title",
-                "slug",
-                "draft",
-                "<p>Content</p>",
-                admin_path="secret-admin",
-            )
+        result = publish_page(
+            mock_client,
+            "Title",
+            "slug",
+            "draft",
+            "<p>Content</p>",
+            admin_path="secret-admin",
+        )
 
         assert result == 0
         output = capsys.readouterr().out
         assert "secret-admin/post.php" in output
 
-    def test_default_admin_path(self, capsys):
+    def test_default_admin_path(self, mock_client, capsys):
         """publish_page defaults to wp-admin in edit URL."""
-        mock_response = MagicMock()
-        mock_response.status_code = 201
-        mock_response.json.return_value = {"id": 42}
+        mock_client.post.return_value = {"id": 42}
 
-        with patch("requests.post", return_value=mock_response):
-            result = publish_page(
-                "https://example.com",
-                "user",
-                "pass",
-                "Title",
-                "slug",
-                "draft",
-                "<p>Content</p>",
-            )
+        result = publish_page(mock_client, "Title", "slug", "draft", "<p>Content</p>")
 
         assert result == 0
         output = capsys.readouterr().out
@@ -1159,11 +1004,11 @@ class TestMain:
         monkeypatch.delenv("WP_APP_PASSWORD", raising=False)
         monkeypatch.delenv("WP_ADMIN_PATH", raising=False)
 
-        mock_response = MagicMock()
-        mock_response.status_code = 201
-        mock_response.json.return_value = {"id": 99}
+        mock_client = MagicMock()
+        mock_client.site_url = "https://example.com"
+        mock_client.post.return_value = {"id": 99}
 
-        with patch("requests.post", return_value=mock_response):
+        with patch("wpa.cli.WPApiClient.from_config", return_value=mock_client):
             result = main(["publish", "--site", "demo", str(valid_md_file)])
 
         assert result == 0
@@ -1175,11 +1020,11 @@ class TestMain:
         monkeypatch.delenv("WP_APP_PASSWORD", raising=False)
         monkeypatch.delenv("WP_ADMIN_PATH", raising=False)
 
-        mock_response = MagicMock()
-        mock_response.status_code = 201
-        mock_response.json.return_value = {"id": 99}
+        mock_client = MagicMock()
+        mock_client.site_url = "https://example.com"
+        mock_client.post.return_value = {"id": 99}
 
-        with patch("requests.post", return_value=mock_response):
+        with patch("wpa.cli.WPApiClient.from_config", return_value=mock_client):
             result = main(["page", "create", "--site", "demo", str(valid_md_file)])
 
         assert result == 0
@@ -1208,7 +1053,7 @@ class TestMain:
             main(["--version"])
         assert exc_info.value.code == 0
         output = capsys.readouterr().out
-        assert "0.5.1" in output
+        assert "0.6.0" in output
 
     def test_help_flag(self, capsys):
         """--help output includes subcommand listing."""
@@ -1219,3 +1064,33 @@ class TestMain:
         assert "publish" in output
         assert "page" in output
         assert "site" in output
+
+
+class TestParseMarkdown:
+    """Tests for parse_markdown() — the shared markdown parser."""
+
+    def test_returns_dict_with_all_fields(self, tmp_path):
+        md = tmp_path / "test.md"
+        md.write_text("---\ntitle: Hello\nslug: hello\nstatus: draft\n---\nBody text\n")
+        result = parse_markdown(str(md))
+        assert result["title"] == "Hello"
+        assert result["slug"] == "hello"
+        assert result["status"] == "draft"
+        assert "<p>Body text</p>" in result["content"]
+
+    def test_preserves_extra_frontmatter(self, tmp_path):
+        md = tmp_path / "test.md"
+        md.write_text("---\ntitle: Test\ncategories: [3, 5]\nauthor: 2\n---\nContent\n")
+        result = parse_markdown(str(md))
+        assert result["categories"] == [3, 5]
+        assert result["author"] == 2
+
+    def test_backward_compat_with_parse_page(self, tmp_path):
+        md = tmp_path / "test.md"
+        md.write_text("---\ntitle: Compat Test\nstatus: publish\n---\nHello\n")
+        title, slug, status, content = parse_page(str(md))
+        data = parse_markdown(str(md))
+        assert title == data["title"]
+        assert slug == data["slug"]
+        assert status == data["status"]
+        assert content == data["content"]

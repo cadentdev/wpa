@@ -79,3 +79,40 @@ def _format_delimited(rows, columns, delimiter):
     for row in rows:
         writer.writerow([str(row.get(col, "")) for col in columns])
     return output.getvalue()
+
+
+def format_ids(rows):
+    """Format as space-separated list of id values.
+
+    Args:
+        rows: List of dicts, each expected to have an 'id' key.
+
+    Returns:
+        Space-separated string of id values.
+    """
+    return " ".join(str(row.get("id", "")) for row in rows)
+
+
+def format_count(rows):
+    """Format as a single integer count.
+
+    Args:
+        rows: List of dicts.
+
+    Returns:
+        String representation of the count.
+    """
+    return str(len(rows))
+
+
+def format_field(rows, field_name):
+    """Format a single field value per row, one per line.
+
+    Args:
+        rows: List of dicts.
+        field_name: The field to extract from each row.
+
+    Returns:
+        Newline-separated string of field values.
+    """
+    return "\n".join(str(row.get(field_name, "")) for row in rows)

@@ -1,12 +1,12 @@
 # WPA — WordPress Automation
 
 [![CI](https://github.com/cadentdev/wpa/actions/workflows/ci.yml/badge.svg)](https://github.com/cadentdev/wpa/actions/workflows/ci.yml)
-[![Coverage](https://img.shields.io/badge/coverage-99%25-brightgreen)](https://github.com/cadentdev/wpa)
+[![Coverage](https://img.shields.io/badge/coverage-75%25-yellow)](https://github.com/cadentdev/wpa)
 [![Python](https://img.shields.io/badge/python-3.9%2B-blue)](https://www.python.org)
 [![PyPI](https://img.shields.io/pypi/v/wpa)](https://pypi.org/project/wpa/)
 [![License: MIT](https://img.shields.io/badge/license-MIT-green)](LICENSE)
 
-CLI tool for WordPress automation — publish pages and manage users via the REST API.
+CLI tool for WordPress automation — manage posts, pages, and users via the REST API.
 
 ## Install
 
@@ -39,14 +39,53 @@ This prompts for your WordPress URL, username, application password (hidden), an
 
 ## Usage
 
-### Publish pages
+### Manage posts
 
 ```bash
-# Publish a page (auto-selects site if only one config exists)
-wpa publish pages/your-page.md
+# List posts (with filtering)
+wpa post list --site mysite
+wpa post list --site mysite --status draft --author 1
+wpa post list --site mysite --category 5 --tag 12
+wpa post list --site mysite --search "announcement" --orderby date --order desc
 
-# Specify which site to use
-wpa publish --site mysite pages/your-page.md
+# Get a single post
+wpa post get 42 --site mysite
+
+# Create a post
+wpa post create --site mysite --title "My Post" --content "<p>Hello</p>" --status draft
+
+# Update a post
+wpa post update 42 --site mysite --title "Updated Title" --status publish
+
+# Delete a post (moves to trash; use --force to permanently delete)
+wpa post delete 42 --site mysite
+wpa post delete 42 --site mysite --force
+```
+
+### Manage pages
+
+```bash
+# List pages
+wpa page list --site mysite
+wpa page list --site mysite --status publish --parent 10
+
+# Get a single page
+wpa page get 42 --site mysite
+
+# Create a page from markdown file
+wpa page create --site mysite pages/about.md
+
+# Create a page from flags
+wpa page create --site mysite --title "About" --content "<p>About us</p>"
+
+# Publish shortcut (equivalent to wpa page create with markdown)
+wpa publish pages/your-page.md --site mysite
+
+# Update a page
+wpa page update 42 --site mysite --title "New Title" --parent 10
+
+# Delete a page
+wpa page delete 42 --site mysite
 ```
 
 ### Manage users
@@ -76,6 +115,27 @@ wpa user delete 42 --site mysite --reassign 1
 ```
 
 Output formats: `table` (default), `json`, `csv`, `tsv`. Use `--fields` to select columns (available: `id`, `username`, `email`, `first_name`, `last_name`, `display_name`, `roles`, `registered`, `url`).
+
+### Output options
+
+All list commands support these output modifiers:
+
+```bash
+# Output only IDs
+wpa post list --site mysite --ids
+
+# Output only the count
+wpa post list --site mysite --count
+
+# Output a single field per result
+wpa post list --site mysite --field title
+
+# Select specific columns
+wpa user list --site mysite --fields id,username,email
+
+# Debug mode (print HTTP request/response details)
+wpa post list --site mysite --debug
+```
 
 ### Site management
 
