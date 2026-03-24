@@ -64,6 +64,37 @@ def _extract_user_row(api_user):
     return row
 
 
+def get_user(client, user_id):
+    """Get a single user by ID.
+
+    Args:
+        client: WPApiClient instance.
+        user_id: User ID.
+
+    Returns:
+        User dict with friendly field names.
+    """
+    _validate_user_id(user_id)
+    params = {"context": "edit"}
+    data = client.get(f"users/{user_id}", params=params)
+    return _extract_user_row(data)
+
+
+def set_role(client, user_id, role):
+    """Set a user's role.
+
+    Args:
+        client: WPApiClient instance.
+        user_id: User ID.
+        role: Role name (administrator, editor, author, contributor, subscriber).
+
+    Returns:
+        Updated user dict from API response.
+    """
+    _validate_user_id(user_id)
+    return client.post(f"users/{user_id}", data={"roles": [role]})
+
+
 def list_users(client, role=None, search=None):
     """Fetch users from WordPress REST API.
 

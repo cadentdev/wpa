@@ -171,7 +171,11 @@ class WPApiClient:
         if params:
             kwargs["params"] = params
         if json_data is not None:
-            kwargs["json"] = json_data
+            if files:
+                # Multipart upload — send metadata as form fields, not JSON
+                kwargs["data"] = json_data
+            else:
+                kwargs["json"] = json_data
         if files:
             kwargs["files"] = files
 

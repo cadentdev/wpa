@@ -27,11 +27,20 @@ from wpa.page import (
     validate_fields as validate_page_fields,
 )
 from wpa.publish import parse_page, publish_page
+from wpa.media import (
+    delete_media,
+    get_media,
+    import_media,
+    list_media,
+    validate_fields as validate_media_fields,
+)
 from wpa.user import (
     DEFAULT_FIELDS as USER_DEFAULT_FIELDS,
     create_user,
     delete_user,
+    get_user,
     list_users,
+    set_role,
     update_user,
     validate_fields as validate_user_fields,
 )
@@ -473,6 +482,125 @@ def _do_user_delete(args):
         return _handle_api_error(e)
 
 
+def _do_user_get(args):
+    """Get a single WordPress user."""
+    try:
+        client = WPApiClient.from_config(site_name=args.site, debug=args.debug)
+        row = get_user(client, args.id)
+        if args.format == "json":
+            print(json.dumps(row, indent=2, ensure_ascii=False))
+        else:
+            for key, value in row.items():
+                print(f"{key}: {value}")
+        return 0
+    except ValueError as e:
+        print(f"Error: {e}")
+        return 1
+    except (WPApiError, WPConnectionError, WPTimeoutError) as e:
+        return _handle_api_error(e)
+
+
+def _do_user_set_role(args):
+    """Set a WordPress user's role."""
+    try:
+        client = WPApiClient.from_config(site_name=args.site, debug=args.debug)
+        result = set_role(client, args.id, args.role)
+        roles = result.get("roles", [])
+        if isinstance(roles, list):
+            roles = ", ".join(roles)
+        print(f"User {args.id} role set to: {roles}")
+        return 0
+    except ValueError as e:
+        print(f"Error: {e}")
+        return 1
+    except (WPApiError, WPConnectionError, WPTimeoutError) as e:
+        return _handle_api_error(e)
+
+
+# --- Media handlers ---
+
+
+def _do_media_list(args):
+    """List WordPress media."""
+    try:
+        client = WPApiClient.from_config(site_name=args.site, debug=args.debug)
+        fields = validate_media_fields(args.fields)
+        rows = list_media(
+            client,
+            media_type=args.media_type,
+            mime_type=args.mime_type,
+            search=args.search,
+            per_page=args.per_page,
+        )
+        return _format_list_output(rows, fields, args)
+    except ValueError as e:
+        print(f"Error: {e}")
+        return 1
+    except (WPApiError, WPConnectionError, WPTimeoutError) as e:
+        return _handle_api_error(e)
+
+
+def _do_media_get(args):
+    """Get a single WordPress media item."""
+    try:
+        client = WPApiClient.from_config(site_name=args.site, debug=args.debug)
+        row = get_media(client, args.id)
+        if args.format == "json":
+            print(json.dumps(row, indent=2, ensure_ascii=False))
+        else:
+            for key, value in row.items():
+                print(f"{key}: {value}")
+        return 0
+    except ValueError as e:
+        print(f"Error: {e}")
+        return 1
+    except (WPApiError, WPConnectionError, WPTimeoutError) as e:
+        return _handle_api_error(e)
+
+
+def _do_media_import(args):
+    """Import a local file as WordPress media."""
+    try:
+        client = WPApiClient.from_config(site_name=args.site, debug=args.debug)
+        result = import_media(
+            client,
+            args.file,
+            title=args.title,
+            alt_text=args.alt_text,
+            caption=args.caption,
+            description=args.description,
+            post=args.post,
+        )
+        media_id = result.get("id", "unknown")
+        source_url = result.get("source_url", "")
+        print(f"Media imported successfully. ID: {media_id}")
+        if source_url:
+            print(f"URL: {source_url}")
+        return 0
+    except (FileNotFoundError, ValueError) as e:
+        print(f"Error: {e}")
+        return 1
+    except (WPApiError, WPConnectionError, WPTimeoutError) as e:
+        return _handle_api_error(e)
+
+
+def _do_media_delete(args):
+    """Delete a WordPress media item."""
+    try:
+        client = WPApiClient.from_config(site_name=args.site, debug=args.debug)
+        result = delete_media(client, args.id, force=args.force)
+        if result.get("deleted"):
+            print(f"Media {args.id} deleted successfully.")
+        else:
+            print(f"Media {args.id} moved to trash.")
+        return 0
+    except ValueError as e:
+        print(f"Error: {e}")
+        return 1
+    except (WPApiError, WPConnectionError, WPTimeoutError) as e:
+        return _handle_api_error(e)
+
+
 # --- Shared parser factories ---
 
 
@@ -788,6 +916,91 @@ def main(argv=None):
     )
     user_delete_parser.set_defaults(func=_do_user_delete)
 
+    # wpa user get <id>
+    user_get_parser = user_subparsers.add_parser(
+        "get", parents=[shared], help="Get a single user"
+    )
+    user_get_parser.add_argument("id", type=int, help="User ID")
+    user_get_parser.add_argument(
+        "--format",
+        default="table",
+        choices=["table", "json"],
+        help="Output format (default: table)",
+    )
+    user_get_parser.set_defaults(func=_do_user_get)
+
+    # wpa user set-role <id> <role>
+    user_set_role_parser = user_subparsers.add_parser(
+        "set-role", parents=[shared], help="Set a user's role"
+    )
+    user_set_role_parser.add_argument("id", type=int, help="User ID")
+    user_set_role_parser.add_argument(
+        "role",
+        help="Role name (administrator, editor, author, contributor, subscriber)",
+    )
+    user_set_role_parser.set_defaults(func=_do_user_set_role)
+
+    # --- wpa media ---
+    media_parser = subparsers.add_parser("media", help="Media management commands")
+    media_subparsers = media_parser.add_subparsers(dest="media_command")
+
+    # wpa media list
+    media_list_parser = media_subparsers.add_parser(
+        "list", parents=[shared, list_p], help="List media"
+    )
+    media_list_parser.add_argument(
+        "--media-type",
+        help="Filter by media type (image, video, audio, application)",
+    )
+    media_list_parser.add_argument(
+        "--mime-type", help="Filter by MIME type (e.g., image/jpeg)"
+    )
+    media_list_parser.add_argument("--search", help="Search media")
+    media_list_parser.add_argument(
+        "--per-page",
+        type=int,
+        default=10,
+        help="Results per page (default: 10)",
+    )
+    media_list_parser.set_defaults(func=_do_media_list)
+
+    # wpa media get <id>
+    media_get_parser = media_subparsers.add_parser(
+        "get", parents=[shared], help="Get a single media item"
+    )
+    media_get_parser.add_argument("id", type=int, help="Media ID")
+    media_get_parser.add_argument(
+        "--format",
+        default="table",
+        choices=["table", "json"],
+        help="Output format (default: table)",
+    )
+    media_get_parser.set_defaults(func=_do_media_get)
+
+    # wpa media import <file>
+    media_import_parser = media_subparsers.add_parser(
+        "import", parents=[shared], help="Upload a local file as media"
+    )
+    media_import_parser.add_argument("file", help="Path to the file to upload")
+    media_import_parser.add_argument("--title", help="Media title")
+    media_import_parser.add_argument("--alt-text", help="Alt text for images")
+    media_import_parser.add_argument("--caption", help="Media caption")
+    media_import_parser.add_argument("--description", help="Media description")
+    media_import_parser.add_argument("--post", type=int, help="Parent post ID")
+    media_import_parser.set_defaults(func=_do_media_import)
+
+    # wpa media delete <id>
+    media_delete_parser = media_subparsers.add_parser(
+        "delete", parents=[shared], help="Delete a media item"
+    )
+    media_delete_parser.add_argument("id", type=int, help="Media ID to delete")
+    media_delete_parser.add_argument(
+        "--force",
+        action="store_true",
+        help="Permanently delete (skip trash)",
+    )
+    media_delete_parser.set_defaults(func=_do_media_delete)
+
     # --- Parse and dispatch ---
     args = parser.parse_args(argv)
 
@@ -809,6 +1022,10 @@ def main(argv=None):
 
     if args.command == "user" and not args.user_command:
         user_parser.print_help()
+        return 1
+
+    if args.command == "media" and not args.media_command:
+        media_parser.print_help()
         return 1
 
     return args.func(args)
