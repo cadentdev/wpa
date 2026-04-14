@@ -1,6 +1,6 @@
 # Release Notes
 
-## v0.7.0 — Media CRUD + User Role Management (DRAFT)
+## v0.7.0 — Media CRUD + User Role Management (2026-04-14)
 
 ### What's New
 
@@ -15,7 +15,7 @@
 
 ### Quality
 
-- 311 tests (+39 from v0.6.0) | bandit clean | pip-audit clean
+- 311 tests (+39 from v0.6.0), 98% coverage | bandit clean | pip-audit: 5 pre-existing transitive CVEs noted (unpinned deps, unrelated to release scope)
 - Media upload uses multipart form data via `WPApiClient` — no new dependencies
 
 ### Closes
