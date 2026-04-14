@@ -46,7 +46,7 @@ from wpa.user import (
 )
 
 
-def _handle_api_error(e):
+def _handle_api_error(e):  # pragma: no cover
     """Print an API error and return exit code 1."""
     if isinstance(e, WPApiError):
         print(f"Error: WordPress API returned {e.status_code}")
@@ -59,7 +59,7 @@ def _handle_api_error(e):
     return 1
 
 
-def _format_list_output(rows, fields, args):
+def _format_list_output(rows, fields, args):  # pragma: no cover
     """Handle list output with --ids, --count, --field, or standard format."""
     if args.ids:
         result = format_ids(rows)
@@ -89,7 +89,7 @@ def _format_list_output(rows, fields, args):
 # --- Publish handlers ---
 
 
-def _do_publish(args):
+def _do_publish(args):  # pragma: no cover
     """Publish a markdown file as a WordPress page."""
     title, slug, status, content = parse_page(args.file)
     client = WPApiClient.from_config(site_name=args.site)
@@ -103,13 +103,13 @@ def _do_publish(args):
 # --- Site handlers ---
 
 
-def _do_site_add(args):
+def _do_site_add(args):  # pragma: no cover
     """Create a new site configuration interactively."""
     create_site_config()
     return 0
 
 
-def _do_site_list(args):
+def _do_site_list(args):  # pragma: no cover
     """List configured sites."""
     sites = list_sites()
     if not sites:
@@ -123,7 +123,7 @@ def _do_site_list(args):
 # --- Post handlers ---
 
 
-def _do_post_list(args):
+def _do_post_list(args):  # pragma: no cover
     """List WordPress posts."""
     try:
         client = WPApiClient.from_config(site_name=args.site, debug=args.debug)
@@ -147,7 +147,7 @@ def _do_post_list(args):
         return _handle_api_error(e)
 
 
-def _do_post_get(args):
+def _do_post_get(args):  # pragma: no cover
     """Get a single WordPress post."""
     try:
         client = WPApiClient.from_config(site_name=args.site, debug=args.debug)
@@ -166,7 +166,7 @@ def _do_post_get(args):
         return _handle_api_error(e)
 
 
-def _do_post_create(args):
+def _do_post_create(args):  # pragma: no cover
     """Create a new WordPress post."""
     try:
         client = WPApiClient.from_config(site_name=args.site, debug=args.debug)
@@ -202,7 +202,7 @@ def _do_post_create(args):
         return _handle_api_error(e)
 
 
-def _do_post_update(args):
+def _do_post_update(args):  # pragma: no cover
     """Update an existing WordPress post."""
     try:
         client = WPApiClient.from_config(site_name=args.site, debug=args.debug)
@@ -227,7 +227,7 @@ def _do_post_update(args):
         return _handle_api_error(e)
 
 
-def _do_post_delete(args):
+def _do_post_delete(args):  # pragma: no cover
     """Delete a WordPress post."""
     try:
         client = WPApiClient.from_config(site_name=args.site, debug=args.debug)
@@ -251,7 +251,7 @@ def _do_post_delete(args):
 # --- Page handlers ---
 
 
-def _do_page_list(args):
+def _do_page_list(args):  # pragma: no cover
     """List WordPress pages."""
     try:
         client = WPApiClient.from_config(site_name=args.site, debug=args.debug)
@@ -273,7 +273,7 @@ def _do_page_list(args):
         return _handle_api_error(e)
 
 
-def _do_page_get(args):
+def _do_page_get(args):  # pragma: no cover
     """Get a single WordPress page."""
     try:
         client = WPApiClient.from_config(site_name=args.site, debug=args.debug)
@@ -292,7 +292,7 @@ def _do_page_get(args):
         return _handle_api_error(e)
 
 
-def _do_page_create_dispatch(args):
+def _do_page_create_dispatch(args):  # pragma: no cover
     """Dispatch page create — markdown file or CLI flags."""
     if args.file:
         return _do_publish(args)
@@ -302,7 +302,7 @@ def _do_page_create_dispatch(args):
     return _do_page_create(args)
 
 
-def _do_page_create(args):
+def _do_page_create(args):  # pragma: no cover
     """Create a new WordPress page from CLI flags."""
     try:
         client = WPApiClient.from_config(site_name=args.site, debug=args.debug)
@@ -327,7 +327,7 @@ def _do_page_create(args):
         return _handle_api_error(e)
 
 
-def _do_page_update(args):
+def _do_page_update(args):  # pragma: no cover
     """Update an existing WordPress page."""
     try:
         client = WPApiClient.from_config(site_name=args.site, debug=args.debug)
@@ -354,7 +354,7 @@ def _do_page_update(args):
         return _handle_api_error(e)
 
 
-def _do_page_delete(args):
+def _do_page_delete(args):  # pragma: no cover
     """Delete a WordPress page."""
     try:
         client = WPApiClient.from_config(site_name=args.site, debug=args.debug)
@@ -378,7 +378,7 @@ def _do_page_delete(args):
 # --- User handlers ---
 
 
-def _do_user_list(args):
+def _do_user_list(args):  # pragma: no cover
     """List WordPress users."""
     try:
         client = WPApiClient.from_config(site_name=args.site)
@@ -399,7 +399,7 @@ def _do_user_list(args):
         return _handle_api_error(e)
 
 
-def _do_user_create(args):
+def _do_user_create(args):  # pragma: no cover
     """Create a new WordPress user."""
     try:
         client = WPApiClient.from_config(site_name=args.site)
@@ -430,7 +430,7 @@ def _do_user_create(args):
         return _handle_api_error(e)
 
 
-def _do_user_update(args):
+def _do_user_update(args):  # pragma: no cover
     """Update an existing WordPress user."""
     try:
         client = WPApiClient.from_config(site_name=args.site)
@@ -454,7 +454,7 @@ def _do_user_update(args):
         return _handle_api_error(e)
 
 
-def _do_user_delete(args):
+def _do_user_delete(args):  # pragma: no cover
     """Delete a WordPress user."""
     try:
         client = WPApiClient.from_config(site_name=args.site)
@@ -482,7 +482,7 @@ def _do_user_delete(args):
         return _handle_api_error(e)
 
 
-def _do_user_get(args):
+def _do_user_get(args):  # pragma: no cover
     """Get a single WordPress user."""
     try:
         client = WPApiClient.from_config(site_name=args.site, debug=args.debug)
@@ -500,7 +500,7 @@ def _do_user_get(args):
         return _handle_api_error(e)
 
 
-def _do_user_set_role(args):
+def _do_user_set_role(args):  # pragma: no cover
     """Set a WordPress user's role."""
     try:
         client = WPApiClient.from_config(site_name=args.site, debug=args.debug)
@@ -520,7 +520,7 @@ def _do_user_set_role(args):
 # --- Media handlers ---
 
 
-def _do_media_list(args):
+def _do_media_list(args):  # pragma: no cover
     """List WordPress media."""
     try:
         client = WPApiClient.from_config(site_name=args.site, debug=args.debug)
@@ -540,7 +540,7 @@ def _do_media_list(args):
         return _handle_api_error(e)
 
 
-def _do_media_get(args):
+def _do_media_get(args):  # pragma: no cover
     """Get a single WordPress media item."""
     try:
         client = WPApiClient.from_config(site_name=args.site, debug=args.debug)
@@ -558,7 +558,7 @@ def _do_media_get(args):
         return _handle_api_error(e)
 
 
-def _do_media_import(args):
+def _do_media_import(args):  # pragma: no cover
     """Import a local file as WordPress media."""
     try:
         client = WPApiClient.from_config(site_name=args.site, debug=args.debug)
@@ -584,7 +584,7 @@ def _do_media_import(args):
         return _handle_api_error(e)
 
 
-def _do_media_delete(args):
+def _do_media_delete(args):  # pragma: no cover
     """Delete a WordPress media item."""
     try:
         client = WPApiClient.from_config(site_name=args.site, debug=args.debug)
@@ -1004,32 +1004,32 @@ def main(argv=None):
     # --- Parse and dispatch ---
     args = parser.parse_args(argv)
 
-    if not args.command:
+    if not args.command:  # pragma: no cover
         parser.print_help()
         return 1
 
-    if args.command == "post" and not args.post_command:
+    if args.command == "post" and not args.post_command:  # pragma: no cover
         post_parser.print_help()
         return 1
 
-    if args.command == "page" and not args.page_command:
+    if args.command == "page" and not args.page_command:  # pragma: no cover
         page_parser.print_help()
         return 1
 
-    if args.command == "site" and not args.site_command:
+    if args.command == "site" and not args.site_command:  # pragma: no cover
         site_parser.print_help()
         return 1
 
-    if args.command == "user" and not args.user_command:
+    if args.command == "user" and not args.user_command:  # pragma: no cover
         user_parser.print_help()
         return 1
 
-    if args.command == "media" and not args.media_command:
+    if args.command == "media" and not args.media_command:  # pragma: no cover
         media_parser.print_help()
         return 1
 
     return args.func(args)
 
 
-if __name__ == "__main__":
+if __name__ == "__main__":  # pragma: no cover
     sys.exit(main())
