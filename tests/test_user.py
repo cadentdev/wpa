@@ -12,7 +12,9 @@ from wpa.user import (
     _validate_user_id,
     create_user,
     delete_user,
+    get_user,
     list_users,
+    set_role,
     update_user,
     validate_fields,
 )
@@ -276,3 +278,58 @@ class TestEmptyUpdatePayload:
     def test_update_with_no_fields_raises(self, mock_client):
         with pytest.raises(ValueError, match="No fields to update"):
             update_user(mock_client, user_id=1)
+
+
+# --- get_user ---
+
+
+class TestGetUser:
+    def test_get_existing_user(self, mock_client):
+        mock_client.get.return_value = MOCK_USER_LIST[0]
+        row = get_user(mock_client, 1)
+        assert row["id"] == 1
+        assert row["username"] == "admin"
+        assert row["email"] == "admin@example.com"
+        assert row["display_name"] == "Admin User"
+        mock_client.get.assert_called_once_with("users/1", params={"context": "edit"})
+
+    def test_get_user_invalid_id_zero(self, mock_client):
+        with pytest.raises(ValueError, match="Invalid user ID"):
+            get_user(mock_client, 0)
+
+    def test_get_user_invalid_id_negative(self, mock_client):
+        with pytest.raises(ValueError, match="Invalid user ID"):
+            get_user(mock_client, -1)
+
+    def test_get_user_invalid_id_string(self, mock_client):
+        with pytest.raises(ValueError, match="Invalid user ID"):
+            get_user(mock_client, "abc")
+
+    def test_get_user_404(self, mock_client):
+        mock_client.get.side_effect = WPApiError(
+            404, "rest_user_invalid_id", "Invalid user ID."
+        )
+        with pytest.raises(WPApiError):
+            get_user(mock_client, 999)
+
+
+# --- set_role ---
+
+
+class TestSetRole:
+    def test_set_role_success(self, mock_client):
+        mock_client.post.return_value = {**MOCK_USER_LIST[1], "roles": ["author"]}
+        result = set_role(mock_client, 2, "author")
+        assert result["roles"] == ["author"]
+        mock_client.post.assert_called_once_with("users/2", data={"roles": ["author"]})
+
+    def test_set_role_invalid_id(self, mock_client):
+        with pytest.raises(ValueError, match="Invalid user ID"):
+            set_role(mock_client, 0, "editor")
+
+    def test_set_role_404(self, mock_client):
+        mock_client.post.side_effect = WPApiError(
+            404, "rest_user_invalid_id", "Invalid user ID."
+        )
+        with pytest.raises(WPApiError):
+            set_role(mock_client, 999, "subscriber")
