@@ -1053,7 +1053,8 @@ class TestMain:
             main(["--version"])
         assert exc_info.value.code == 0
         output = capsys.readouterr().out
-        assert "0.6.0" in output
+        from wpa import __version__
+        assert __version__ in output
 
     def test_help_flag(self, capsys):
         """--help output includes subcommand listing."""
