@@ -1054,6 +1054,7 @@ class TestMain:
         assert exc_info.value.code == 0
         output = capsys.readouterr().out
         from wpa import __version__
+
         assert __version__ in output
 
     def test_help_flag(self, capsys):
