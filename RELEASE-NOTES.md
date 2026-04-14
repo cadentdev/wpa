@@ -1,5 +1,29 @@
 # Release Notes
 
+## v0.7.0 — Media CRUD + User Role Management (DRAFT)
+
+### What's New
+
+- **`wpa media` subcommand** — Full CRUD for WordPress media via the REST API:
+  - `wpa media list` — List media items with `--media-type` (image/video/audio/application), `--mime-type`, `--search`, `--per-page`. Supports all standard output formats and field selection.
+  - `wpa media get <id>` — Fetch a single media item.
+  - `wpa media import <file>` — Upload a local file as a WordPress media item (multipart upload) with optional `--title`, `--alt-text`, `--caption`, `--description`, and `--post` (parent post ID).
+  - `wpa media delete <id>` — Trash a media item; `--force` permanently deletes.
+- **`wpa user get <id>`** — Retrieve a single WordPress user, complementing the existing `list` / `create` / `update` / `delete` commands.
+- **`wpa user set-role <id> <role>`** — Shortcut for changing a user's role without going through `wpa user update`. Follows the wp-cli `wp user set-role` convention.
+- **Module additions** — New `wpa/media.py` module (`list_media`, `get_media`, `import_media`, `delete_media`, `validate_fields`). `wpa/user.py` extended with `get_user` and role management. CLI wired via argparse subparsers following the existing `post`/`page`/`user` patterns.
+
+### Quality
+
+- 311 tests (+39 from v0.6.0) | bandit clean | pip-audit clean
+- Media upload uses multipart form data via `WPApiClient` — no new dependencies
+
+### Closes
+
+- #23 — Media CRUD + user enhancements
+
+---
+
 ## v0.6.0 — API Client Layer + Post/Page CRUD (2026-03-23)
 
 ### What's New

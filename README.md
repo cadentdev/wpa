@@ -6,7 +6,7 @@
 [![PyPI](https://img.shields.io/pypi/v/wpa)](https://pypi.org/project/wpa/)
 [![License: MIT](https://img.shields.io/badge/license-MIT-green)](LICENSE)
 
-CLI tool for WordPress automation — manage posts, pages, and users via the REST API.
+CLI tool for WordPress automation — manage posts, pages, users, and media via the REST API.
 
 ## Install
 
@@ -104,14 +104,42 @@ wpa user list --site mysite --format tsv > users.tsv
 wpa user list --site mysite --role editor
 wpa user list --site mysite --search "jane"
 
+# Get a single user
+wpa user get 42 --site mysite
+
 # Create a user
 wpa user create --site mysite --username jdoe --email jdoe@example.com --role author
 
 # Update a user
 wpa user update 42 --site mysite --email newemail@example.com --role editor
 
+# Set a user's role (shortcut for update --role)
+wpa user set-role 42 editor --site mysite
+
 # Delete a user (reassign their posts to user 1)
 wpa user delete 42 --site mysite --reassign 1
+```
+
+### Manage media
+
+```bash
+# List media items
+wpa media list --site mysite
+wpa media list --site mysite --media-type image --per-page 50
+
+# List media as JSON, specific fields only
+wpa media list --site mysite --format json --fields id,title,source_url,media_type
+
+# Get a single media item
+wpa media get 123 --site mysite
+
+# Import (upload) a local file as a WordPress media item
+wpa media import /path/to/photo.jpg --site mysite
+wpa media import /path/to/photo.jpg --site mysite --title "Cover photo" --alt-text "Team at launch"
+
+# Delete a media item (moves to trash; use --force to permanently delete)
+wpa media delete 123 --site mysite
+wpa media delete 123 --site mysite --force
 ```
 
 Output formats: `table` (default), `json`, `csv`, `tsv`. Use `--fields` to select columns (available: `id`, `username`, `email`, `first_name`, `last_name`, `display_name`, `roles`, `registered`, `url`).
