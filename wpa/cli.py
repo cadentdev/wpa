@@ -34,6 +34,27 @@ from wpa.media import (
     list_media,
     validate_fields as validate_media_fields,
 )
+from wpa.comment import (
+    approve_comment,
+    create_comment,
+    delete_comment,
+    get_comment,
+    list_comments,
+    spam_comment,
+    trash_comment,
+    unapprove_comment,
+    unspam_comment,
+    update_comment,
+    validate_fields as validate_comment_fields,
+)
+from wpa.term import (
+    create_term,
+    delete_term,
+    get_term,
+    list_terms,
+    update_term,
+    validate_fields as validate_term_fields,
+)
 from wpa.user import (
     DEFAULT_FIELDS as USER_DEFAULT_FIELDS,
     create_user,
@@ -404,13 +425,25 @@ def _do_user_create(args):  # pragma: no cover
     try:
         client = WPApiClient.from_config(site_name=args.site)
 
-        # Prompt for password if not provided
-        new_password = args.password
-        if not new_password:
+        # Password acquisition order: --password-stdin > --password (deprecated)
+        # > interactive prompt. --password is still accepted for backward compat
+        # but emits a deprecation warning to stderr because it leaks via
+        # ps(1) / shell history / CI logs.
+        new_password = None
+        if getattr(args, "password_stdin", False):
+            new_password = sys.stdin.readline().rstrip("\n")
+        elif args.password:
+            print(
+                "Warning: --password exposes the password via ps(1) and shell "
+                "history. Use --password-stdin or omit for interactive prompt.",
+                file=sys.stderr,
+            )
+            new_password = args.password
+        else:
             new_password = getpass.getpass("Password for new user: ")
-            if not new_password:
-                print("Error: Password cannot be empty.")
-                return 1
+        if not new_password:
+            print("Error: Password cannot be empty.")
+            return 1
 
         result = create_user(
             client,
@@ -593,6 +626,274 @@ def _do_media_delete(args):  # pragma: no cover
             print(f"Media {args.id} deleted successfully.")
         else:
             print(f"Media {args.id} moved to trash.")
+        return 0
+    except ValueError as e:
+        print(f"Error: {e}")
+        return 1
+    except (WPApiError, WPConnectionError, WPTimeoutError) as e:
+        return _handle_api_error(e)
+
+
+# --- Comment handlers ---
+
+
+def _do_comment_list(args):  # pragma: no cover
+    """List WordPress comments."""
+    try:
+        client = WPApiClient.from_config(site_name=args.site, debug=args.debug)
+        fields = validate_comment_fields(args.fields)
+        rows = list_comments(
+            client,
+            post=args.post,
+            status=args.status,
+            parent=args.parent,
+            author_email=args.author_email,
+            search=args.search,
+            per_page=args.per_page,
+            orderby=args.orderby,
+            order=args.order,
+        )
+        return _format_list_output(rows, fields, args)
+    except ValueError as e:
+        print(f"Error: {e}")
+        return 1
+    except (WPApiError, WPConnectionError, WPTimeoutError) as e:
+        return _handle_api_error(e)
+
+
+def _do_comment_get(args):  # pragma: no cover
+    """Get a single WordPress comment."""
+    try:
+        client = WPApiClient.from_config(site_name=args.site, debug=args.debug)
+        row = get_comment(client, args.id)
+        if args.format == "json":
+            print(json.dumps(row, indent=2, ensure_ascii=False))
+        else:
+            for key, value in row.items():
+                print(f"{key}: {value}")
+        return 0
+    except ValueError as e:
+        print(f"Error: {e}")
+        return 1
+    except (WPApiError, WPConnectionError, WPTimeoutError) as e:
+        return _handle_api_error(e)
+
+
+def _do_comment_create(args):  # pragma: no cover
+    """Create a new WordPress comment."""
+    try:
+        client = WPApiClient.from_config(site_name=args.site, debug=args.debug)
+        result = create_comment(
+            client,
+            post=args.post,
+            content=args.content,
+            author_name=args.author_name,
+            author_email=args.author_email,
+            parent=args.parent,
+            status=args.status,
+        )
+        print("Comment created successfully!")
+        print(f"  ID:     {result.get('id')}")
+        print(f"  Status: {result.get('status', '')}")
+        return 0
+    except ValueError as e:
+        print(f"Error: {e}")
+        return 1
+    except (WPApiError, WPConnectionError, WPTimeoutError) as e:
+        return _handle_api_error(e)
+
+
+def _do_comment_update(args):  # pragma: no cover
+    """Update an existing WordPress comment."""
+    try:
+        client = WPApiClient.from_config(site_name=args.site, debug=args.debug)
+        fields = {}
+        if args.content is not None:
+            fields["content"] = args.content
+        if args.status is not None:
+            fields["status"] = args.status
+        if args.author_name is not None:
+            fields["author_name"] = args.author_name
+        if args.author_email is not None:
+            fields["author_email"] = args.author_email
+        update_comment(client, args.id, **fields)
+        print(f"Comment {args.id} updated successfully!")
+        return 0
+    except ValueError as e:
+        print(f"Error: {e}")
+        return 1
+    except (WPApiError, WPConnectionError, WPTimeoutError) as e:
+        return _handle_api_error(e)
+
+
+def _do_comment_delete(args):  # pragma: no cover
+    """Delete a WordPress comment."""
+    try:
+        client = WPApiClient.from_config(site_name=args.site, debug=args.debug)
+        result = delete_comment(client, args.id, force=args.force)
+        if args.force:
+            if result.get("deleted"):
+                print(f"Comment {args.id} deleted permanently.")
+            else:
+                print(f"Unexpected response: {result}")
+        else:
+            print(f"Comment {args.id} moved to trash.")
+        return 0
+    except ValueError as e:
+        print(f"Error: {e}")
+        return 1
+    except (WPApiError, WPConnectionError, WPTimeoutError) as e:
+        return _handle_api_error(e)
+
+
+def _do_comment_moderation(action_func, action_label):  # pragma: no cover
+    """Build a moderation handler that calls action_func and prints status."""
+
+    def handler(args):
+        try:
+            client = WPApiClient.from_config(site_name=args.site, debug=args.debug)
+            result = action_func(client, args.id)
+            status = result.get("status", "")
+            print(f"Comment {args.id} {action_label} (status: {status}).")
+            return 0
+        except ValueError as e:
+            print(f"Error: {e}")
+            return 1
+        except (WPApiError, WPConnectionError, WPTimeoutError) as e:
+            return _handle_api_error(e)
+
+    return handler
+
+
+def _do_comment_approve(args):  # pragma: no cover
+    return _do_comment_moderation(approve_comment, "approved")(args)
+
+
+def _do_comment_unapprove(args):  # pragma: no cover
+    return _do_comment_moderation(unapprove_comment, "unapproved")(args)
+
+
+def _do_comment_spam(args):  # pragma: no cover
+    return _do_comment_moderation(spam_comment, "marked as spam")(args)
+
+
+def _do_comment_unspam(args):  # pragma: no cover
+    return _do_comment_moderation(unspam_comment, "restored from spam")(args)
+
+
+def _do_comment_trash(args):  # pragma: no cover
+    """Move a comment to trash (DELETE without force)."""
+    try:
+        client = WPApiClient.from_config(site_name=args.site, debug=args.debug)
+        trash_comment(client, args.id)
+        print(f"Comment {args.id} moved to trash.")
+        return 0
+    except ValueError as e:
+        print(f"Error: {e}")
+        return 1
+    except (WPApiError, WPConnectionError, WPTimeoutError) as e:
+        return _handle_api_error(e)
+
+
+# --- Term handlers ---
+
+
+def _do_term_list(args):  # pragma: no cover
+    """List WordPress terms in a taxonomy."""
+    try:
+        client = WPApiClient.from_config(site_name=args.site, debug=args.debug)
+        fields = validate_term_fields(args.fields)
+        rows = list_terms(
+            client,
+            taxonomy=args.taxonomy,
+            search=args.search,
+            parent=args.parent,
+            hide_empty=args.hide_empty,
+            per_page=args.per_page,
+            orderby=args.orderby,
+            order=args.order,
+        )
+        return _format_list_output(rows, fields, args)
+    except ValueError as e:
+        print(f"Error: {e}")
+        return 1
+    except (WPApiError, WPConnectionError, WPTimeoutError) as e:
+        return _handle_api_error(e)
+
+
+def _do_term_get(args):  # pragma: no cover
+    """Get a single WordPress term."""
+    try:
+        client = WPApiClient.from_config(site_name=args.site, debug=args.debug)
+        row = get_term(client, args.id, taxonomy=args.taxonomy)
+        if args.format == "json":
+            print(json.dumps(row, indent=2, ensure_ascii=False))
+        else:
+            for key, value in row.items():
+                print(f"{key}: {value}")
+        return 0
+    except ValueError as e:
+        print(f"Error: {e}")
+        return 1
+    except (WPApiError, WPConnectionError, WPTimeoutError) as e:
+        return _handle_api_error(e)
+
+
+def _do_term_create(args):  # pragma: no cover
+    """Create a new WordPress term."""
+    try:
+        client = WPApiClient.from_config(site_name=args.site, debug=args.debug)
+        result = create_term(
+            client,
+            name=args.name,
+            taxonomy=args.taxonomy,
+            slug=args.slug,
+            description=args.description,
+            parent=args.parent,
+        )
+        print("Term created successfully!")
+        print(f"  ID:   {result.get('id')}")
+        print(f"  Name: {result.get('name', args.name)}")
+        return 0
+    except ValueError as e:
+        print(f"Error: {e}")
+        return 1
+    except (WPApiError, WPConnectionError, WPTimeoutError) as e:
+        return _handle_api_error(e)
+
+
+def _do_term_update(args):  # pragma: no cover
+    """Update an existing WordPress term."""
+    try:
+        client = WPApiClient.from_config(site_name=args.site, debug=args.debug)
+        fields = {}
+        if args.name is not None:
+            fields["name"] = args.name
+        if args.slug is not None:
+            fields["slug"] = args.slug
+        if args.description is not None:
+            fields["description"] = args.description
+        if args.parent is not None:
+            fields["parent"] = args.parent
+        update_term(client, args.id, taxonomy=args.taxonomy, **fields)
+        print(f"Term {args.id} updated successfully!")
+        return 0
+    except ValueError as e:
+        print(f"Error: {e}")
+        return 1
+    except (WPApiError, WPConnectionError, WPTimeoutError) as e:
+        return _handle_api_error(e)
+
+
+def _do_term_delete(args):  # pragma: no cover
+    """Delete a WordPress term (always force-deleted; terms cannot be trashed)."""
+    try:
+        client = WPApiClient.from_config(site_name=args.site, debug=args.debug)
+        result = delete_term(client, args.id, taxonomy=args.taxonomy)
+        if result.get("deleted"):
+            print(f"Term {args.id} deleted.")
+        else:
+            print(f"Unexpected response: {result}")
         return 0
     except ValueError as e:
         print(f"Error: {e}")
@@ -878,7 +1179,15 @@ def main(argv=None):
     user_create_parser.add_argument(
         "--password",
         default=None,
-        help="Password (prompted interactively if not provided)",
+        help=(
+            "DEPRECATED: Password on the command line leaks via ps(1) and "
+            "shell history. Use --password-stdin or omit for interactive prompt."
+        ),
+    )
+    user_create_parser.add_argument(
+        "--password-stdin",
+        action="store_true",
+        help="Read password from stdin (safer than --password).",
     )
     user_create_parser.add_argument("--role", help="User role (e.g., editor, author)")
     user_create_parser.add_argument("--first-name", help="First name")
@@ -1001,6 +1310,212 @@ def main(argv=None):
     )
     media_delete_parser.set_defaults(func=_do_media_delete)
 
+    # --- wpa comment ---
+    comment_parser = subparsers.add_parser(
+        "comment", help="Comment management commands"
+    )
+    comment_subparsers = comment_parser.add_subparsers(dest="comment_command")
+
+    # wpa comment list
+    comment_list_parser = comment_subparsers.add_parser(
+        "list", parents=[shared, list_p], help="List comments"
+    )
+    comment_list_parser.add_argument("--post", type=int, help="Filter by post ID")
+    comment_list_parser.add_argument(
+        "--status",
+        help="Filter by status (approved, hold, spam, trash)",
+    )
+    comment_list_parser.add_argument(
+        "--parent", type=int, help="Filter by parent comment ID"
+    )
+    comment_list_parser.add_argument("--author-email", help="Filter by author email")
+    comment_list_parser.add_argument("--search", help="Search comments")
+    comment_list_parser.add_argument(
+        "--per-page", type=int, default=10, help="Results per page (default: 10)"
+    )
+    comment_list_parser.add_argument("--orderby", help="Sort field (date, id, etc.)")
+    comment_list_parser.add_argument(
+        "--order", choices=["asc", "desc"], help="Sort order"
+    )
+    comment_list_parser.set_defaults(func=_do_comment_list)
+
+    # wpa comment get <id>
+    comment_get_parser = comment_subparsers.add_parser(
+        "get", parents=[shared], help="Get a single comment"
+    )
+    comment_get_parser.add_argument("id", type=int, help="Comment ID")
+    comment_get_parser.add_argument(
+        "--format",
+        default="table",
+        choices=["table", "json"],
+        help="Output format (default: table)",
+    )
+    comment_get_parser.set_defaults(func=_do_comment_get)
+
+    # wpa comment create
+    comment_create_parser = comment_subparsers.add_parser(
+        "create", parents=[shared], help="Create a new comment"
+    )
+    comment_create_parser.add_argument(
+        "--post", type=int, required=True, help="Post ID being commented on"
+    )
+    comment_create_parser.add_argument("--content", required=True, help="Comment body")
+    comment_create_parser.add_argument("--author-name", help="Author display name")
+    comment_create_parser.add_argument("--author-email", help="Author email")
+    comment_create_parser.add_argument(
+        "--parent", type=int, help="Parent comment ID for replies"
+    )
+    comment_create_parser.add_argument(
+        "--status", help="Comment status (approved, hold, spam)"
+    )
+    comment_create_parser.set_defaults(func=_do_comment_create)
+
+    # wpa comment update <id>
+    comment_update_parser = comment_subparsers.add_parser(
+        "update", parents=[shared], help="Update an existing comment"
+    )
+    comment_update_parser.add_argument("id", type=int, help="Comment ID to update")
+    comment_update_parser.add_argument("--content", help="New content")
+    comment_update_parser.add_argument("--status", help="New status")
+    comment_update_parser.add_argument("--author-name", help="New author display name")
+    comment_update_parser.add_argument("--author-email", help="New author email")
+    comment_update_parser.set_defaults(func=_do_comment_update)
+
+    # wpa comment delete <id>
+    comment_delete_parser = comment_subparsers.add_parser(
+        "delete", parents=[shared], help="Delete a comment"
+    )
+    comment_delete_parser.add_argument("id", type=int, help="Comment ID to delete")
+    comment_delete_parser.add_argument(
+        "--force", action="store_true", help="Permanently delete (skip trash)"
+    )
+    comment_delete_parser.set_defaults(func=_do_comment_delete)
+
+    # Comment moderation subcommands
+    for action_name, action_func, help_text in (
+        ("approve", _do_comment_approve, "Approve a comment"),
+        ("unapprove", _do_comment_unapprove, "Unapprove a comment (mark as held)"),
+        ("spam", _do_comment_spam, "Mark a comment as spam"),
+        ("unspam", _do_comment_unspam, "Restore a spammed comment"),
+        ("trash", _do_comment_trash, "Move a comment to trash"),
+    ):
+        action_parser = comment_subparsers.add_parser(
+            action_name, parents=[shared], help=help_text
+        )
+        action_parser.add_argument("id", type=int, help="Comment ID")
+        action_parser.set_defaults(func=action_func)
+
+    # --- wpa term / category / tag ---
+    def _add_term_subparsers(parent_parser, default_taxonomy, allow_taxonomy_flag):
+        """Add list/get/create/update/delete subparsers under parent_parser."""
+        sub = parent_parser.add_subparsers(
+            dest=f"{parent_parser.prog.split()[-1]}_command"
+        )
+
+        def _taxonomy_arg(p):
+            if allow_taxonomy_flag:
+                p.add_argument(
+                    "--taxonomy",
+                    default=default_taxonomy,
+                    help=f"Taxonomy slug (default: {default_taxonomy})",
+                )
+            else:
+                p.set_defaults(taxonomy=default_taxonomy)
+
+        # list
+        list_parser_ = sub.add_parser(
+            "list", parents=[shared, list_p], help="List terms"
+        )
+        _taxonomy_arg(list_parser_)
+        list_parser_.add_argument("--search", help="Search terms")
+        list_parser_.add_argument("--parent", type=int, help="Filter by parent term ID")
+        list_parser_.add_argument(
+            "--hide-empty",
+            action="store_true",
+            help="Hide terms with no associated posts",
+        )
+        list_parser_.add_argument(
+            "--per-page",
+            type=int,
+            default=100,
+            help="Results per page (default: 100)",
+        )
+        list_parser_.add_argument(
+            "--orderby", help="Sort field (name, slug, count, id)"
+        )
+        list_parser_.add_argument("--order", choices=["asc", "desc"], help="Sort order")
+        list_parser_.set_defaults(func=_do_term_list)
+
+        # get
+        get_parser_ = sub.add_parser("get", parents=[shared], help="Get a single term")
+        get_parser_.add_argument("id", type=int, help="Term ID")
+        _taxonomy_arg(get_parser_)
+        get_parser_.add_argument(
+            "--format",
+            default="table",
+            choices=["table", "json"],
+            help="Output format (default: table)",
+        )
+        get_parser_.set_defaults(func=_do_term_get)
+
+        # create
+        create_parser_ = sub.add_parser(
+            "create", parents=[shared], help="Create a new term"
+        )
+        create_parser_.add_argument("--name", required=True, help="Term name")
+        _taxonomy_arg(create_parser_)
+        create_parser_.add_argument("--slug", help="URL slug")
+        create_parser_.add_argument("--description", help="Term description")
+        create_parser_.add_argument(
+            "--parent", type=int, help="Parent term ID (hierarchical taxonomies)"
+        )
+        create_parser_.set_defaults(func=_do_term_create)
+
+        # update
+        update_parser_ = sub.add_parser(
+            "update", parents=[shared], help="Update an existing term"
+        )
+        update_parser_.add_argument("id", type=int, help="Term ID to update")
+        _taxonomy_arg(update_parser_)
+        update_parser_.add_argument("--name", help="New name")
+        update_parser_.add_argument("--slug", help="New slug")
+        update_parser_.add_argument("--description", help="New description")
+        update_parser_.add_argument("--parent", type=int, help="New parent term ID")
+        update_parser_.set_defaults(func=_do_term_update)
+
+        # delete
+        delete_parser_ = sub.add_parser(
+            "delete",
+            parents=[shared],
+            help="Delete a term (always permanent — terms cannot be trashed)",
+        )
+        delete_parser_.add_argument("id", type=int, help="Term ID to delete")
+        _taxonomy_arg(delete_parser_)
+        delete_parser_.set_defaults(func=_do_term_delete)
+
+        return sub
+
+    term_parser = subparsers.add_parser(
+        "term", help="Taxonomy term management (categories, tags, custom taxonomies)"
+    )
+    _add_term_subparsers(
+        term_parser, default_taxonomy="category", allow_taxonomy_flag=True
+    )
+
+    category_parser = subparsers.add_parser(
+        "category", help="Category management (alias for 'term --taxonomy=category')"
+    )
+    _add_term_subparsers(
+        category_parser, default_taxonomy="category", allow_taxonomy_flag=False
+    )
+
+    tag_parser = subparsers.add_parser(
+        "tag", help="Tag management (alias for 'term --taxonomy=post_tag')"
+    )
+    _add_term_subparsers(
+        tag_parser, default_taxonomy="post_tag", allow_taxonomy_flag=False
+    )
+
     # --- Parse and dispatch ---
     args = parser.parse_args(argv)
 
@@ -1026,6 +1541,28 @@ def main(argv=None):
 
     if args.command == "media" and not args.media_command:  # pragma: no cover
         media_parser.print_help()
+        return 1
+
+    if args.command == "comment" and not args.comment_command:  # pragma: no cover
+        comment_parser.print_help()
+        return 1
+
+    if args.command == "term" and not getattr(
+        args, "term_command", None
+    ):  # pragma: no cover
+        term_parser.print_help()
+        return 1
+
+    if args.command == "category" and not getattr(
+        args, "category_command", None
+    ):  # pragma: no cover
+        category_parser.print_help()
+        return 1
+
+    if args.command == "tag" and not getattr(
+        args, "tag_command", None
+    ):  # pragma: no cover
+        tag_parser.print_help()
         return 1
 
     return args.func(args)

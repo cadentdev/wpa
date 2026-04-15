@@ -54,6 +54,52 @@ class TestUrl:
         )
 
 
+class TestEndpointValidation:
+    """Defense-in-depth — _url() must reject traversal / injection patterns."""
+
+    @pytest.mark.parametrize(
+        "bad",
+        [
+            "../users/1",
+            "posts/../users",
+            "posts//42",
+            "/posts",
+            "posts\rSet-Cookie: evil",
+            "posts\nX-Injected: 1",
+            "posts%2f..%2fusers",
+            "posts%2F..%2Fusers",
+            "posts\\..\\users",
+            "",
+            "posts/../../wp-admin/admin-ajax.php",
+        ],
+    )
+    def test_rejects_malicious_endpoints(self, client, bad):
+        with pytest.raises(ValueError):
+            client._url(bad)
+
+    def test_rejects_non_string_endpoint(self, client):
+        with pytest.raises(ValueError):
+            client._url(None)
+
+    @pytest.mark.parametrize(
+        "good",
+        [
+            "posts",
+            "posts/42",
+            "users/me",
+            "categories",
+            "tags/5",
+            "users/5/application-passwords",
+            "custom_taxonomy",
+            "custom-taxonomy",
+        ],
+    )
+    def test_accepts_valid_endpoints(self, client, good):
+        # Just verify it doesn't raise and builds a string.
+        url = client._url(good)
+        assert url == f"https://example.com/wp-json/wp/v2/{good}"
+
+
 class TestFromConfig:
     @patch("wpa.api.resolve_config")
     def test_creates_client_from_config(self, mock_resolve):
@@ -454,3 +500,153 @@ class TestAuthHeader:
 
         decoded = base64.b64decode(header.split(" ")[1]).decode()
         assert decoded == "admin:xxxx xxxx xxxx"
+
+
+class TestSecurityHardening:
+    """Tests for M1-M4 security hardening (added pre-v0.8.0 release)."""
+
+    # --- M2: response size cap ---
+
+    @patch("wpa.api.requests.request")
+    def test_response_size_over_cap_raises(self, mock_request, client):
+        from wpa.api import MAX_RESPONSE_BYTES
+
+        resp = MagicMock()
+        resp.ok = True
+        resp.status_code = 200
+        resp.url = "https://example.com/wp-json/wp/v2/posts"
+        resp.content = b"x" * (MAX_RESPONSE_BYTES + 1)
+        mock_request.return_value = resp
+
+        with pytest.raises(WPApiError) as exc_info:
+            client.get("posts")
+        assert (
+            "response_too_large" in str(exc_info.value)
+            or exc_info.value.code == "response_too_large"
+        )
+
+    @patch("wpa.api.requests.request")
+    def test_response_at_cap_accepted(self, mock_request, client):
+        from wpa.api import MAX_RESPONSE_BYTES
+
+        resp = MagicMock()
+        resp.ok = True
+        resp.status_code = 200
+        resp.url = "https://example.com/wp-json/wp/v2/posts"
+        resp.content = b"x" * MAX_RESPONSE_BYTES
+        resp.json.return_value = {"id": 1}
+        mock_request.return_value = resp
+
+        # Does not raise.
+        client.get("posts")
+
+    # --- M2: total_pages cap ---
+
+    @patch("wpa.api.requests.get")
+    def test_total_pages_clamped(self, mock_get, client):
+        from wpa.api import MAX_TOTAL_PAGES
+
+        resp = MagicMock()
+        resp.ok = True
+        resp.status_code = 200
+        resp.url = "https://example.com/wp-json/wp/v2/posts"
+        resp.content = b"[]"
+        resp.json.return_value = []
+        resp.headers = {"X-WP-TotalPages": "999999"}
+        mock_get.return_value = resp
+
+        # Exhaust the iterator — should stop at MAX_TOTAL_PAGES requests, not 999999.
+        list(client.get_list("posts"))
+        # First request + (MAX_TOTAL_PAGES - 1) more = MAX_TOTAL_PAGES total.
+        assert mock_get.call_count == MAX_TOTAL_PAGES
+
+    @patch("wpa.api.requests.get")
+    def test_total_pages_bad_header_defaults_to_one(self, mock_get, client):
+        resp = MagicMock()
+        resp.ok = True
+        resp.status_code = 200
+        resp.url = "https://example.com/wp-json/wp/v2/posts"
+        resp.content = b"[]"
+        resp.json.return_value = []
+        resp.headers = {"X-WP-TotalPages": "not-a-number"}
+        mock_get.return_value = resp
+
+        list(client.get_list("posts"))
+        assert mock_get.call_count == 1
+
+    # --- M3: redirects disabled on writes ---
+
+    @patch("wpa.api.requests.request")
+    def test_post_disables_redirects(self, mock_request, client):
+        resp = MagicMock()
+        resp.ok = True
+        resp.status_code = 200
+        resp.url = "https://example.com/wp-json/wp/v2/posts"
+        resp.content = b'{"id": 1}'
+        resp.json.return_value = {"id": 1}
+        mock_request.return_value = resp
+
+        client.post("posts", data={"title": "x"})
+        kwargs = mock_request.call_args.kwargs
+        assert kwargs.get("allow_redirects") is False
+
+    @patch("wpa.api.requests.request")
+    def test_delete_disables_redirects(self, mock_request, client):
+        resp = MagicMock()
+        resp.ok = True
+        resp.status_code = 200
+        resp.url = "https://example.com/wp-json/wp/v2/posts/1"
+        resp.content = b"{}"
+        resp.json.return_value = {}
+        mock_request.return_value = resp
+
+        client.delete("posts/1")
+        kwargs = mock_request.call_args.kwargs
+        assert kwargs.get("allow_redirects") is False
+
+    @patch("wpa.api.requests.request")
+    def test_get_allows_redirects_by_default(self, mock_request, client):
+        resp = MagicMock()
+        resp.ok = True
+        resp.status_code = 200
+        resp.url = "https://example.com/wp-json/wp/v2/posts/1"
+        resp.content = b'{"id": 1}'
+        resp.json.return_value = {"id": 1}
+        mock_request.return_value = resp
+
+        client.get("posts/1")
+        kwargs = mock_request.call_args.kwargs
+        # GET does not explicitly disable redirects — requests default is True.
+        assert "allow_redirects" not in kwargs or kwargs["allow_redirects"] is True
+
+    # --- M3: scheme-downgrade detection ---
+
+    @patch("wpa.api.requests.request")
+    def test_https_to_http_downgrade_refused(self, mock_request, client):
+        resp = MagicMock()
+        resp.ok = True
+        resp.status_code = 200
+        resp.url = "http://example.com/wp-json/wp/v2/posts/1"  # downgraded
+        resp.content = b'{"id": 1}'
+        resp.json.return_value = {"id": 1}
+        mock_request.return_value = resp
+
+        with pytest.raises(WPApiError) as exc_info:
+            client.get("posts/1")
+        assert exc_info.value.code == "tls_downgrade"
+
+    @patch("wpa.api.requests.request")
+    def test_http_site_no_downgrade_check(self, mock_request):
+        # Private-network sites may legitimately be http://; downgrade check
+        # only triggers when the configured site_url is https://.
+        c = WPApiClient("http://192.168.1.10", "admin", "pass")
+        resp = MagicMock()
+        resp.ok = True
+        resp.status_code = 200
+        resp.url = "http://192.168.1.10/wp-json/wp/v2/posts/1"
+        resp.content = b'{"id": 1}'
+        resp.json.return_value = {"id": 1}
+        mock_request.return_value = resp
+
+        # Does not raise.
+        c.get("posts/1")
