@@ -115,7 +115,12 @@ def list_comments(
     if post is not None:
         params["post"] = post
     if status:
-        params["status"] = status
+        # WordPress REST API is asymmetric on comment status: responses
+        # serialize it as 'approved' (past tense) but the /comments list
+        # query param only accepts 'approve' (imperative). Passing
+        # 'approved' verbatim returns zero rows even when approved
+        # comments exist. Normalize here so callers can pass either form.
+        params["status"] = "approve" if status == "approved" else status
     if parent is not None:
         params["parent"] = parent
     if author_email:

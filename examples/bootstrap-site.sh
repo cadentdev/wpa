@@ -517,6 +517,14 @@ echo "Approving comment..."
 wpa comment approve "${COMMENT_ID}" --site "${SITE}"
 echo
 
+# List with --status approved immediately after approve — confirms the
+# moderation wrapper round-tripped to the REST API. This MUST run before
+# the content update below; editing content can re-trigger WordPress
+# moderation and transition the comment back out of `approved`.
+echo "Listing approved comments on Featured post ${FEATURED_ID}..."
+wpa comment list --site "${SITE}" --post "${FEATURED_ID}" --status approved
+echo
+
 # Update the comment's content via `wpa comment update`.
 echo "Updating comment content..."
 wpa comment update "${COMMENT_ID}" \
@@ -524,9 +532,14 @@ wpa comment update "${COMMENT_ID}" \
     --content "<p>Updated by the ${PREFIX} smoke test at $(date -u +%FT%TZ).</p>"
 echo
 
-# List comments filtered by post and status — exercises the most common
-# filter combinations.
-echo "Listing comments on Featured post ${FEATURED_ID}..."
+# After the content edit, re-list without any status filter. Note: the
+# WordPress REST API defaults `status` to `approved` when the caller omits
+# it, so `wpa comment list --post <id>` effectively means "approved on
+# this post". If WordPress moved the comment back to `hold` after the
+# edit (moderation hook re-run), this will show zero results — that's
+# expected behavior, not a smoke-test failure. To see all statuses, pass
+# each one explicitly: --status approved, --status hold, etc.
+echo "Listing approved comments on Featured post ${FEATURED_ID} (post-edit)..."
 wpa comment list --site "${SITE}" --post "${FEATURED_ID}" --status approved
 echo
 

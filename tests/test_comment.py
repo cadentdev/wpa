@@ -104,6 +104,33 @@ class TestListComments:
         params = mock_client.get_list.call_args[1]["params"]
         assert params["status"] == "hold"
 
+    def test_approved_status_normalized_to_approve(self, mock_client):
+        # WordPress REST API is asymmetric: responses serialize `status` as
+        # 'approved' (past tense) but the /comments query param only accepts
+        # 'approve' (imperative). Passing 'approved' verbatim returns 0 rows
+        # even when approved comments exist. `list_comments` must normalize.
+        mock_client.get_list.return_value = iter([])
+        list_comments(mock_client, status="approved")
+        params = mock_client.get_list.call_args[1]["params"]
+        assert params["status"] == "approve"
+
+    def test_approve_status_passes_through(self, mock_client):
+        # Callers who already know about the REST API quirk and pass 'approve'
+        # directly should not be double-translated.
+        mock_client.get_list.return_value = iter([])
+        list_comments(mock_client, status="approve")
+        params = mock_client.get_list.call_args[1]["params"]
+        assert params["status"] == "approve"
+
+    def test_hold_spam_trash_unchanged(self, mock_client):
+        # Only 'approved' is asymmetric; hold/spam/trash use the same
+        # value for query and response.
+        for s in ("hold", "spam", "trash"):
+            mock_client.get_list.return_value = iter([])
+            list_comments(mock_client, status=s)
+            params = mock_client.get_list.call_args[1]["params"]
+            assert params["status"] == s, f"status={s} was mangled"
+
     def test_passes_parent_filter(self, mock_client):
         mock_client.get_list.return_value = iter([])
         list_comments(mock_client, parent=5)
