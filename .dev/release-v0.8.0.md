@@ -2,16 +2,16 @@
 
 **Started:** 2026-04-15 | **Project:** wpa (WordPress Automation)
 
-## Current Step: Step 1 — Security Audit
+## Current Step: Step 4 — Test Coverage
 
 | Step | Status | Notes |
 |------|--------|-------|
 | Pre-flight | [x] | Branch clean, Python tooling detected, 12 commits, 408 tests |
-| 1. Security Audit | [~] | Launching RedTeam full swarm + Fabric threat model |
-| 2. Triage Findings | [ ] | |
-| 3. Fix Blockers | [ ] | |
-| --- GATE: Security | [ ] | |
-| 4. Test Coverage | [ ] | Expect 408 tests, 99% coverage |
+| 1. Security Audit | [x] | Pentester + STRIDE: 0 blocker / 0 high / 5 med / 5 low / 3 info |
+| 2. Triage Findings | [x] | User chose: fix all 4 mediums before shipping |
+| 3. Fix Blockers | [x] | M1-M4 fixed in commit f7aec26 |
+| --- GATE: Security | [x] | PASS — 0 blockers remaining, hardening committed |
+| 4. Test Coverage | [~] | Running full pytest + coverage |
 | --- GATE: Quality | [ ] | |
 | 5. Dependency Audit | [ ] | pip-audit clean at end of FeatureDev |
 | 6. Documentation Final Pass | [ ] | Tick wpa-prd.md Phase 4 COMPLETE |

@@ -385,15 +385,17 @@ Based on the REST API mapping matrix, the following command groups are implement
 
 **Not shipped in this phase (deferred or de-scoped):** URL-based media import (originally contemplated as "upload local file or URL"; only local-file multipart upload was delivered). URL-based import would require either server-side sideloading or a client-side fetch-then-upload pattern, and is deferred pending a real use case.
 
-### Phase 4: Comments and terms (v0.8.0)
+### Phase 4: Comments and terms (v0.8.0) — **COMPLETE**
 
-| Deliverable | Details |
-|---|---|
-| `wpa comment` subcommands | Full CRUD plus moderation (`approve`, `spam`, `trash`, `unapprove`, `unspam`) |
-| `wpa term` subcommands | CRUD for any taxonomy (categories, tags, custom) |
-| `wpa category` alias | Convenience alias for `wpa term --taxonomy=category` |
-| `wpa tag` alias | Convenience alias for `wpa term --taxonomy=post_tag` |
-| Reusable meta handler | Shared logic for `meta add/get/update/delete/list` across entities |
+| Deliverable | Status | Details |
+|---|---|---|
+| `wpa comment` subcommands | ✅ shipped | Full CRUD plus moderation (`approve`, `spam`, `trash`, `unapprove`, `unspam`) |
+| `wpa term` subcommands | ✅ shipped | CRUD for any taxonomy (categories, tags, custom) |
+| `wpa category` alias | ✅ shipped | Convenience alias for `wpa term --taxonomy=category` |
+| `wpa tag` alias | ✅ shipped | Convenience alias for `wpa term --taxonomy=post_tag` |
+| Reusable meta handler | ⏸ deferred | Tracked as [#33](https://github.com/cadentdev/wpa/issues/33); deferred pending a closer look at how REST-exposed meta varies across vanilla WP vs plugins (ACF, Meta Box). |
+
+Shipped in v0.8.0 (2026-04-15). See `RELEASE-NOTES.md` for full notes including the `status=approve` WP REST API asymmetry bug caught during Phase 8c live smoke test, and the `_resolve_endpoint` case-sensitivity bug caught during Phase 4 refactor.
 
 ### Phase 5: Plugins, menus, and widgets (v0.9.0)
 
