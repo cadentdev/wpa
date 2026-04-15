@@ -469,33 +469,62 @@ echo
 #
 # What this tests/demonstrates:
 #
-#   - Creating a comment against the Featured post from Section 4
-#   - Fetching the comment back to verify the create round-tripped
+#   - Creating TWO comments against the Featured post from Section 4:
+#       (a) a PERSISTENT comment that is approved immediately and left
+#           in place — shows up in the rendered Featured post page when
+#           you browse the site, proves end-to-end comment rendering
+#       (b) a TRANSIENT comment that walks the full moderation state
+#           machine and is then trashed + force-deleted at the end of
+#           the section, so it does not linger as smoke-test cruft
+#   - Fetching a comment back to verify the create round-tripped
 #   - Walking the moderation state machine (approve → unapprove →
 #     spam → unspam → back to approved) and asserting each transition
 #   - Updating comment content after create
-#   - Filtering the comment list by status and by post
-#   - Trashing and then permanently deleting (cleaned up at the end of
-#     the section so the comment doesn't linger as smoke-test cruft;
-#     everything else the script creates is left in place by design,
-#     but a thread of test comments per run would clutter the
-#     moderation queue across re-runs)
+#   - Filtering the comment list by status and by post — the list
+#     step after the state walk should return BOTH comments in
+#     `status: approved`, exercising multi-result listing
 
 echo "=== 5. Comments ==="
 echo
 
-# Create a comment against the Featured post (which is in 'publish' status
-# from Section 4, so it accepts comments).
-echo "Creating comment on Featured post ${FEATURED_ID}..."
+# -------- Persistent comment (left in place) --------
+# This one stays. It gets created, approved immediately (WP comments
+# from authors without a prior approved comment default to `hold`), and
+# is left on the Featured post as a visible artifact. Running the script
+# multiple times against a dirty target accumulates these — clean up by
+# rolling the target back to a baseline snapshot, or by deleting the
+# ID printed in the summary at the bottom of this script.
+echo "Creating PERSISTENT comment on Featured post ${FEATURED_ID}..."
+PERSIST_CREATE_OUT=$(wpa comment create \
+    --site "${SITE}" \
+    --post "${FEATURED_ID}" \
+    --content "<p>Persistent smoke-test comment from <code>${PREFIX}</code>. Left in place as a rendered-site artifact.</p>" \
+    --author-name "${PREFIX} Reader" \
+    --author-email "${PREFIX}-reader@example.test")
+echo "$PERSIST_CREATE_OUT"
+PERSIST_COMMENT_ID=$(echo "$PERSIST_CREATE_OUT" | extract_id)
+echo "Persistent comment ID=${PERSIST_COMMENT_ID}"
+echo
+
+echo "Approving persistent comment ${PERSIST_COMMENT_ID}..."
+wpa comment approve "${PERSIST_COMMENT_ID}" --site "${SITE}"
+echo
+
+# -------- Transient comment (full state-machine walk, then deleted) --------
+# This one is for exercising the moderation shortcuts and then gets
+# cleaned up before the script exits. It does NOT leave an artifact
+# behind — re-runs against a dirty target won't accumulate transient
+# comments the way they accumulate persistent ones.
+echo "Creating TRANSIENT comment on Featured post ${FEATURED_ID}..."
 COMMENT_CREATE_OUT=$(wpa comment create \
     --site "${SITE}" \
     --post "${FEATURED_ID}" \
-    --content "<p>Great post! Signed by the <code>${PREFIX}</code> smoke test.</p>" \
+    --content "<p>Transient smoke-test comment from the <code>${PREFIX}</code> reviewer.</p>" \
     --author-name "${PREFIX} Reviewer" \
     --author-email "${PREFIX}-reviewer@example.test")
 echo "$COMMENT_CREATE_OUT"
 COMMENT_ID=$(echo "$COMMENT_CREATE_OUT" | extract_id)
-echo "Comment ID=${COMMENT_ID}"
+echo "Transient comment ID=${COMMENT_ID}"
 echo
 
 # Fetch the comment back — tests `wpa comment get`.
@@ -526,7 +555,9 @@ echo
 # List with --status approved immediately after approve — confirms the
 # moderation wrapper round-tripped to the REST API. This MUST run before
 # the content update below; editing content can re-trigger WordPress
-# moderation and transition the comment back out of `approved`.
+# moderation and transition the comment back out of `approved`. At this
+# point BOTH comments (persistent + transient) should be in status
+# `approved` and both should appear in the listing.
 echo "Listing approved comments on Featured post ${FEATURED_ID}..."
 wpa comment list --site "${SITE}" --post "${FEATURED_ID}" --status approved
 echo
@@ -694,27 +725,29 @@ printf "  %-10s ID=%-6s %s\n" "Page"     "${ABOUT_ID}"       "title=${PREFIX}: A
 printf "  %-10s ID=%-6s %s\n" "Page"     "${GALLERY_ID}"     "title=${PREFIX}: Gallery"
 printf "  %-10s ID=%-6s %s\n" "Post"     "${WELCOME_ID}"     "title=${PREFIX}: Welcome"
 printf "  %-10s ID=%-6s %s\n" "Post"     "${FEATURED_ID}"    "title=${PREFIX}: Featured post"
-printf "  %-10s ID=%-6s %s\n" "Category" "${CAT_ID}"         "name=${PREFIX} Alias Category (updated)"
-printf "  %-10s ID=%-6s %s\n" "Tag"      "${TAG_ID}"         "name=${PREFIX}-alias-tag"
+printf "  %-10s ID=%-6s %s\n" "Category" "${CAT_ID}"            "name=${PREFIX} Alias Category (updated)"
+printf "  %-10s ID=%-6s %s\n" "Tag"      "${TAG_ID}"            "name=${PREFIX}-alias-tag"
+printf "  %-10s ID=%-6s %s\n" "Comment"  "${PERSIST_COMMENT_ID}" "on Featured post (approved, persistent)"
 echo
 echo "Created and then deleted during the run (v0.8.0 surface):"
 echo
-printf "  %-10s          %s\n" "Comment"  "on Featured post — trashed then force-deleted"
+printf "  %-10s          %s\n" "Comment"  "transient, walked state machine — trashed then force-deleted"
 printf "  %-10s          %s\n" "Category" "${PREFIX} Generic Category — force-deleted"
 printf "  %-10s          %s\n" "Tag"      "${PREFIX}-generic-tag — force-deleted"
 echo
 echo "To clean up manually (the bootstrap script leaves the items above in place):"
 echo
 # Same %-6s trick for the cleanup commands so the --site flag lines up.
-printf "  wpa post     delete %-6s --site %s --force\n"    "${WELCOME_ID}"     "${SITE}"
-printf "  wpa post     delete %-6s --site %s --force\n"    "${FEATURED_ID}"    "${SITE}"
-printf "  wpa page     delete %-6s --site %s --force\n"    "${ABOUT_ID}"       "${SITE}"
-printf "  wpa page     delete %-6s --site %s --force\n"    "${GALLERY_ID}"     "${SITE}"
-printf "  wpa media    delete %-6s --site %s --force\n"    "${MEDIA_HERO_ID}"  "${SITE}"
-printf "  wpa media    delete %-6s --site %s --force\n"    "${MEDIA_THUMB_ID}" "${SITE}"
-printf "  wpa category delete %-6s --site %s\n"            "${CAT_ID}"         "${SITE}"
-printf "  wpa tag      delete %-6s --site %s\n"            "${TAG_ID}"         "${SITE}"
-printf "  wpa user     delete %-6s --site %s --reassign 1\n" "${USER_ID}"      "${SITE}"
+printf "  wpa comment  delete %-6s --site %s --force\n"    "${PERSIST_COMMENT_ID}" "${SITE}"
+printf "  wpa post     delete %-6s --site %s --force\n"    "${WELCOME_ID}"         "${SITE}"
+printf "  wpa post     delete %-6s --site %s --force\n"    "${FEATURED_ID}"        "${SITE}"
+printf "  wpa page     delete %-6s --site %s --force\n"    "${ABOUT_ID}"           "${SITE}"
+printf "  wpa page     delete %-6s --site %s --force\n"    "${GALLERY_ID}"         "${SITE}"
+printf "  wpa media    delete %-6s --site %s --force\n"    "${MEDIA_HERO_ID}"      "${SITE}"
+printf "  wpa media    delete %-6s --site %s --force\n"    "${MEDIA_THUMB_ID}"     "${SITE}"
+printf "  wpa category delete %-6s --site %s\n"            "${CAT_ID}"             "${SITE}"
+printf "  wpa tag      delete %-6s --site %s\n"            "${TAG_ID}"             "${SITE}"
+printf "  wpa user     delete %-6s --site %s --reassign 1\n" "${USER_ID}"          "${SITE}"
 echo
 echo "Or, for a release-gate smoke test: roll back the target container"
 echo "to its baseline snapshot (e.g. via an ansible playbook that runs"
