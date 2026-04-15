@@ -16,6 +16,9 @@ _TAXONOMY_ENDPOINTS = {
 }
 
 _TAXONOMY_SLUG_RE = re.compile(r"^[a-z0-9_-]+$", re.IGNORECASE)
+# Note: IGNORECASE allows mixed-case input; _resolve_endpoint lowercases
+# before lookup so `POST_TAG` and `Category` route to the correct endpoint.
+# WordPress stores taxonomy slugs as lowercase, so normalization is safe.
 
 # Maps friendly field names to WordPress REST API response keys
 TERM_FIELDS = {
@@ -77,6 +80,7 @@ def _resolve_endpoint(taxonomy):
     if not taxonomy or not _TAXONOMY_SLUG_RE.match(taxonomy):
         raise ValueError(f"Invalid taxonomy: {taxonomy!r}")
 
+    taxonomy = taxonomy.lower()
     return _TAXONOMY_ENDPOINTS.get(taxonomy, taxonomy)
 
 

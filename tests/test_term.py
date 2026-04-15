@@ -58,6 +58,20 @@ class TestResolveEndpoint:
         with pytest.raises(ValueError, match="Invalid taxonomy"):
             _resolve_endpoint("../etc/passwd")
 
+    def test_uppercase_category_normalized(self):
+        # Users may type taxonomy slugs in mixed case; WP stores them lowercase.
+        # Without normalization, POST_TAG falls through the endpoint map and
+        # hits /wp/v2/POST_TAG (404) instead of /wp/v2/tags.
+        assert _resolve_endpoint("POST_TAG") == "tags"
+        assert _resolve_endpoint("Category") == "categories"
+
+    def test_mixed_case_custom_taxonomy_normalized(self):
+        assert _resolve_endpoint("Genre") == "genre"
+
+    def test_invalid_taxonomy_with_spaces_raises(self):
+        with pytest.raises(ValueError, match="Invalid taxonomy"):
+            _resolve_endpoint("post tag")
+
 
 class TestExtractTermRow:
     def test_extracts_all_fields(self):

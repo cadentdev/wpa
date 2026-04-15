@@ -1,5 +1,7 @@
 """Comment CRUD and moderation operations via WordPress REST API."""
 
+from wpa.post import _extract_rendered
+
 # Maps friendly field names to WordPress REST API response keys
 COMMENT_FIELDS = {
     "id": "id",
@@ -67,13 +69,6 @@ def _validate_post_id(post_id):
     """
     if not isinstance(post_id, int) or isinstance(post_id, bool) or post_id < 1:
         raise ValueError(f"Invalid post ID: {post_id}")
-
-
-def _extract_rendered(value):
-    """Extract rendered content from WP API response fields."""
-    if isinstance(value, dict):
-        return value.get("rendered", str(value))
-    return value
 
 
 def _extract_comment_row(api_comment):
