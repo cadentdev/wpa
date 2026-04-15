@@ -425,13 +425,25 @@ def _do_user_create(args):  # pragma: no cover
     try:
         client = WPApiClient.from_config(site_name=args.site)
 
-        # Prompt for password if not provided
-        new_password = args.password
-        if not new_password:
+        # Password acquisition order: --password-stdin > --password (deprecated)
+        # > interactive prompt. --password is still accepted for backward compat
+        # but emits a deprecation warning to stderr because it leaks via
+        # ps(1) / shell history / CI logs.
+        new_password = None
+        if getattr(args, "password_stdin", False):
+            new_password = sys.stdin.readline().rstrip("\n")
+        elif args.password:
+            print(
+                "Warning: --password exposes the password via ps(1) and shell "
+                "history. Use --password-stdin or omit for interactive prompt.",
+                file=sys.stderr,
+            )
+            new_password = args.password
+        else:
             new_password = getpass.getpass("Password for new user: ")
-            if not new_password:
-                print("Error: Password cannot be empty.")
-                return 1
+        if not new_password:
+            print("Error: Password cannot be empty.")
+            return 1
 
         result = create_user(
             client,
@@ -1167,7 +1179,15 @@ def main(argv=None):
     user_create_parser.add_argument(
         "--password",
         default=None,
-        help="Password (prompted interactively if not provided)",
+        help=(
+            "DEPRECATED: Password on the command line leaks via ps(1) and "
+            "shell history. Use --password-stdin or omit for interactive prompt."
+        ),
+    )
+    user_create_parser.add_argument(
+        "--password-stdin",
+        action="store_true",
+        help="Read password from stdin (safer than --password).",
     )
     user_create_parser.add_argument("--role", help="User role (e.g., editor, author)")
     user_create_parser.add_argument("--first-name", help="First name")

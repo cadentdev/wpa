@@ -1,6 +1,7 @@
 """Shared REST API client for all WPA commands."""
 
 import base64
+import re
 import sys
 
 import requests
@@ -14,6 +15,40 @@ _ERROR_MESSAGES = {
     403: "Permission denied. Your user account does not have the required capability.",
     404: "Resource not found.",
 }
+
+# Defense-in-depth caps against hostile / buggy upstream responses.
+# Tuned for "WP REST API payloads that any reasonable site produces."
+MAX_RESPONSE_BYTES = 50 * 1024 * 1024  # 50 MB — any single response
+MAX_TOTAL_PAGES = 1000  # pagination ceiling regardless of X-WP-TotalPages
+
+# Endpoint path sanitizer — defense-in-depth against traversal. All legitimate
+# WP REST endpoints are ASCII slugs with optional numeric IDs and literal
+# slashes, e.g. "posts", "posts/42", "users/me". Anything else is suspicious.
+_ENDPOINT_ALLOWED = re.compile(r"^[A-Za-z0-9][A-Za-z0-9_\-/]*$")
+_ENDPOINT_FORBIDDEN = ("..", "//", "\\", "\r", "\n", "%2f", "%2F", "%5c", "%5C")
+
+
+def _validate_endpoint(endpoint):
+    """Reject endpoint strings that could escape the /wp-json/wp/v2/ prefix.
+
+    This is defense-in-depth — individual modules already validate their
+    inputs (see term._resolve_endpoint), but we want a central guard so any
+    future caller that forgets to validate still can't smuggle traversal or
+    CRLF sequences into the URL.
+    """
+    if not endpoint or not isinstance(endpoint, str):
+        raise ValueError(f"Invalid endpoint: {endpoint!r}")
+    if endpoint.startswith("/"):
+        raise ValueError(f"Endpoint must be relative, got {endpoint!r}")
+    for bad in _ENDPOINT_FORBIDDEN:
+        if bad in endpoint:
+            raise ValueError(
+                f"Endpoint {endpoint!r} contains forbidden sequence {bad!r}"
+            )
+    if not _ENDPOINT_ALLOWED.match(endpoint):
+        raise ValueError(
+            f"Endpoint {endpoint!r} contains characters outside [A-Za-z0-9_-/]"
+        )
 
 
 class WPApiClient:
@@ -62,7 +97,11 @@ class WPApiClient:
 
         Returns:
             Full URL like https://example.com/wp-json/wp/v2/posts
+
+        Raises:
+            ValueError: If endpoint contains traversal or injection patterns.
         """
+        _validate_endpoint(endpoint)
         return f"{self.site_url}/wp-json/wp/v2/{endpoint}"
 
     def _auth_header(self):
@@ -93,6 +132,32 @@ class WPApiClient:
                 f"DEBUG: Response: {response.status_code} "
                 f"({len(response.content)} bytes)",
                 file=sys.stderr,
+            )
+
+    def _check_response_size(self, response):
+        """Raise WPApiError if the response body exceeds MAX_RESPONSE_BYTES."""
+        # Content-Length is advisory; check actual bytes too. requests has
+        # already read the body at this point (we don't use stream=True), so
+        # len(response.content) is authoritative.
+        if len(response.content) > MAX_RESPONSE_BYTES:
+            raise WPApiError(
+                response.status_code,
+                "response_too_large",
+                f"Response from {self.site_url} exceeded "
+                f"{MAX_RESPONSE_BYTES} bytes ({len(response.content)} bytes).",
+            )
+
+    def _check_no_scheme_downgrade(self, response):
+        """Refuse a response whose URL downgraded from https to http."""
+        final_url = getattr(response, "url", None)
+        if not isinstance(final_url, str):
+            return
+        if self.site_url.startswith("https://") and final_url.startswith("http://"):
+            raise WPApiError(
+                0,
+                "tls_downgrade",
+                f"Refusing to trust response: request was https but "
+                f"final URL is http ({final_url}). Possible MITM.",
             )
 
     def _handle_response(self, response):
@@ -168,6 +233,11 @@ class WPApiClient:
             "headers": headers,
             "timeout": self.timeout,
         }
+        # Write methods never follow redirects — a redirect on POST/DELETE is
+        # almost always a misconfigured server or an attack (e.g., a redirect
+        # that causes a retry with the body replayed to a different host).
+        if method.upper() in ("POST", "PUT", "PATCH", "DELETE"):
+            kwargs["allow_redirects"] = False
         if params:
             kwargs["params"] = params
         if json_data is not None:
@@ -196,6 +266,9 @@ class WPApiClient:
             raise WPConnectionError(f"Request failed: {e}")
 
         self._debug_log(method, url, response=response)
+
+        self._check_no_scheme_downgrade(response)
+        self._check_response_size(response)
 
         return self._handle_response(response)
 
@@ -253,6 +326,9 @@ class WPApiClient:
 
         self._debug_log("GET", url, response=response)
 
+        self._check_no_scheme_downgrade(response)
+        self._check_response_size(response)
+
         data = self._handle_response(response)
 
         if not isinstance(data, list):
@@ -260,8 +336,15 @@ class WPApiClient:
 
         yield from data
 
-        # Check for additional pages
-        total_pages = int(response.headers.get("X-WP-TotalPages", 1))
+        # Check for additional pages — clamp to MAX_TOTAL_PAGES to defend
+        # against a hostile or buggy server that returns an absurd
+        # X-WP-TotalPages value (e.g., 999999) and forces an infinite loop.
+        try:
+            total_pages = int(response.headers.get("X-WP-TotalPages", 1))
+        except (TypeError, ValueError):
+            total_pages = 1
+        if total_pages > MAX_TOTAL_PAGES:
+            total_pages = MAX_TOTAL_PAGES
 
         for page_num in range(2, total_pages + 1):
             page_params = {**params, "page": page_num}
@@ -286,6 +369,9 @@ class WPApiClient:
                 raise WPConnectionError(f"Request failed: {e}")
 
             self._debug_log("GET", url, response=response)
+
+            self._check_no_scheme_downgrade(response)
+            self._check_response_size(response)
 
             page_data = self._handle_response(response)
             if isinstance(page_data, list):
