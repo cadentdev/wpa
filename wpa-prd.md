@@ -1,10 +1,10 @@
 # WPA — Product Requirements Document
 
 **Product:** WPA (WordPress Automation)
-**Version:** PRD v1.0
-**Date:** 2026-03-21
+**Version:** PRD v1.2
+**Date:** 2026-04-14
 **Author:** Neil Johnson, Cadent Creative
-**Current release:** v0.5.1
+**Current release:** v0.7.0
 **Repository:** [github.com/cadentdev/wpa](https://github.com/cadentdev/wpa)
 **PyPI:** [pypi.org/project/wpa](https://pypi.org/project/wpa/)
 **License:** MIT
@@ -207,19 +207,68 @@ The `--site` flag selects a named config. With one config, it auto-selects. With
 
 ## 6. Command structure
 
-### 6.1 Implemented commands (v0.5.1)
+### 6.1 Implemented commands (v0.7.0)
+
+**Content publishing**
 
 | Command | Description |
 |---|---|
-| `wpa publish <file.md>` | Publish a markdown file as a WordPress page |
-| `wpa page create <file.md>` | Create a page from markdown with frontmatter |
-| `wpa site add` | Interactively add a new site configuration |
-| `wpa site list` | List all configured sites |
+| `wpa publish <file.md>` | Publish a markdown file as a WordPress page (uses `api.py` via `publish.py`) |
+
+**Posts** (Tier 1, shipped v0.6.0)
+
+| Command | Description |
+|---|---|
+| `wpa post list` | List posts with `--status`, `--author`, `--category`, `--tag`, `--search`, `--orderby`, `--order`, `--per-page` |
+| `wpa post get <id>` | Get a single post by ID |
+| `wpa post create` | Create a post from CLI flags (`--title`, `--content`, `--status`, `--author`, `--category`, `--tag`, `--featured-media`) |
+| `wpa post update <id>` | Update post fields |
+| `wpa post delete <id>` | Trash or `--force` delete a post |
+
+**Pages** (Tier 1, shipped v0.6.0)
+
+| Command | Description |
+|---|---|
+| `wpa page list` | List pages with `--status`, `--search`, `--parent`, `--orderby`, `--order` |
+| `wpa page get <id>` | Get a single page by ID |
+| `wpa page create <file.md>` | Create a page from a markdown file with frontmatter (pre-existing, refactored to `api.py` in v0.6.0) |
+| `wpa page create --title --content` | Create a page from CLI flags |
+| `wpa page update <id>` | Update page fields |
+| `wpa page delete <id>` | Trash or `--force` delete a page |
+
+**Users** (shipped v0.5.0, extended v0.6.0 and v0.7.0)
+
+| Command | Description |
+|---|---|
 | `wpa user list` | List users with `--role`, `--search`, `--format`, `--fields` |
+| `wpa user get <id>` | Get a single user by ID (v0.7.0) |
 | `wpa user create` | Create user with `--username`, `--email`, `--role`, `--password` |
 | `wpa user update <id>` | Update user fields |
+| `wpa user set-role <id> <role>` | Shortcut for role changes, wp-cli-compatible (v0.7.0) |
 | `wpa user delete <id>` | Delete user with `--reassign` |
+
+**Media** (Tier 1, shipped v0.7.0)
+
+| Command | Description |
+|---|---|
+| `wpa media list` | List media items with `--media-type`, `--mime-type`, `--search`, `--per-page` |
+| `wpa media get <id>` | Get a single media item by ID (supports `--format json` for scripted access to fields like `source_url`) |
+| `wpa media import <file>` | Upload a local file as a WordPress media item via multipart POST. Optional `--title`, `--alt-text`, `--caption`, `--description`, `--post` (attach to parent post). |
+| `wpa media delete <id>` | Trash or `--force` delete a media item |
+
+**Site configuration**
+
+| Command | Description |
+|---|---|
+| `wpa site add` | Interactively add a new site configuration at `~/.config/wpa/<name>/.env` |
+| `wpa site list` | List all configured sites |
+
+**Global**
+
+| Command | Description |
+|---|---|
 | `wpa --version` | Display WPA version |
+| `wpa --help` | Show help for any command or subcommand |
 
 ### 6.2 Planned command groups
 
@@ -275,15 +324,14 @@ Based on the REST API mapping matrix, the following command groups are implement
 | Flag | Description |
 |---|---|
 | `--site <name>` | Select a named site configuration |
-| `--json` | Output as JSON |
-| `--csv` | Output as CSV |
-| `--ids` | Output only resource IDs |
+| `--format {table,json,csv,tsv}` | Output format for list commands (default: `table`) |
+| `--fields <f1,f2>` | Limit list output to specific columns |
+| `--ids` | Output only resource IDs (one per line) |
 | `--count` | Output only the count of results |
-| `--fields <f1,f2>` | Limit output to specific fields |
 | `--field <f>` | Output a single field per result |
-| `--debug` | Show HTTP request/response details |
+| `--debug` | Show HTTP request/response details for troubleshooting |
 | `--version` | Display WPA version |
-| `--help` | Show help for any command |
+| `--help` | Show help for any command or subcommand |
 
 ---
 
@@ -302,35 +350,40 @@ Based on the REST API mapping matrix, the following command groups are implement
 | Security hardening (user ID validation, JSON error handling, response sanitization) | Shipped v0.5.1 |
 | `CLAUDE.md` — agent-facing documentation for Claude Code | Shipped v0.5.1 |
 
-### Phase 2: API client layer and post/page CRUD (v0.6.0)
+### Phase 2: API client layer and post/page CRUD (v0.6.0) — COMPLETE
 
 **Goal:** Extract a reusable API client from existing modules, then implement the most-used content management commands.
 
-| Deliverable | Details |
+**Shipped:** v0.6.0, 2026-03-23.
+
+| Deliverable | Status |
 |---|---|
-| `api.py` module | Reusable REST API client with auth, pagination, error handling, retries |
-| Extend `formatter.py` | Add `--ids`, `--count`, and `--field` (singular) output modes |
-| `wpa post list` | List posts with filtering (`--status`, `--author`, `--search`, `--per-page`) |
-| `wpa post get <id>` | Get a single post by ID |
-| `wpa post create` | Create post from CLI flags, `--from-file`, or stdin |
-| `wpa post update <id>` | Update post fields |
-| `wpa post delete <id>` | Delete/trash a post |
-| `wpa page list/get/update/delete` | Expand page subcommand to full CRUD |
-| Refactor `wpa publish` | Use new `api.py` layer; maintain backward compatibility |
-| Refactor `wpa user` | Use new `api.py` layer; verify all existing tests pass |
+| `api.py` module — reusable REST API client (`WPApiClient`) with auth, error handling, custom exceptions (`WPApiError`, `WPConnectionError`, `WPTimeoutError`) | Shipped v0.6.0 |
+| Extend `formatter.py` — `--ids`, `--count`, `--field` output modes | Shipped v0.6.0 |
+| `wpa post list/get/create/update/delete` — full CRUD with rich filtering | Shipped v0.6.0 |
+| `wpa page list/get/update/delete` — expand page subcommand to full CRUD (create already shipped in v0.4.0) | Shipped v0.6.0 |
+| Refactor `wpa publish` to use `api.py` | Shipped v0.6.0 |
+| Refactor `wpa user` to use `api.py` | Shipped v0.6.0 |
+| `--debug` flag on all commands for HTTP request/response tracing | Shipped v0.6.0 |
 
-**Definition of done:** All commands have tests, 99% coverage maintained, CI passing across 3 OS × 4 Python versions. No direct `requests` calls outside `api.py`.
+**Definition of done (met):** 272 tests, ruff/bandit/pip-audit clean, CI passing across 3 OS × 4 Python versions. No direct `requests` calls outside `api.py`.
 
-### Phase 3: Media and user enhancements (v0.7.0)
+### Phase 3: Media and user enhancements (v0.7.0) — COMPLETE
 
-| Deliverable | Details |
+**Shipped:** v0.7.0, 2026-04-14.
+
+| Deliverable | Status |
 |---|---|
-| `wpa media import <file>` | Upload local file or URL as media attachment |
-| `wpa media list` | List media with filters |
-| `wpa media get <id>` | Get media details |
-| `wpa media delete <id>` | Delete media attachment |
-| `wpa user get <id>` | Get user details |
-| `wpa user set-role <id> <role>` | Set user role |
+| `wpa media import <file>` — multipart upload of a local file with optional `--title`, `--alt-text`, `--caption`, `--description`, `--post` metadata | Shipped v0.7.0 |
+| `wpa media list` — list media with `--media-type`, `--mime-type`, `--search`, `--per-page` filters | Shipped v0.7.0 |
+| `wpa media get <id>` — get media details, including `source_url` for downstream embedding | Shipped v0.7.0 |
+| `wpa media delete <id>` — trash-aware delete with `--force` | Shipped v0.7.0 |
+| `wpa user get <id>` — get user details | Shipped v0.7.0 |
+| `wpa user set-role <id> <role>` — wp-cli-compatible role shortcut | Shipped v0.7.0 |
+
+**Definition of done (met):** 311 tests (+39 from v0.6.0), 98% coverage (see retrospective), bandit clean, CI green across the full matrix. New feature modules `wpa/media.py` (99% covered) and `wpa/user.py` extensions (96% covered). CLI adapter layer in `wpa/cli.py` excluded from coverage via `# pragma: no cover` per the v0.7.0 release retro.
+
+**Not shipped in this phase (deferred or de-scoped):** URL-based media import (originally contemplated as "upload local file or URL"; only local-file multipart upload was delivered). URL-based import would require either server-side sideloading or a client-side fetch-then-upload pattern, and is deferred pending a real use case.
 
 ### Phase 4: Comments and terms (v0.8.0)
 
