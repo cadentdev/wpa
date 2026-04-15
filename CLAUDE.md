@@ -32,7 +32,7 @@ CI runs on ubuntu/macos/windows across Python 3.9, 3.11, 3.12, 3.13. The require
 
 ## Architecture
 
-**Entry point**: `wpa/cli.py` — argparse-based CLI with subcommands (`publish`, `post list/get/create/update/delete`, `page list/get/create/update/delete`, `site add/list`, `user list/get/create/update/delete/set-role`, `media list/get/import/delete`).
+**Entry point**: `wpa/cli.py` — argparse-based CLI with subcommands (`publish`, `post list/get/create/update/delete`, `page list/get/create/update/delete`, `site add/list`, `user list/get/create/update/delete/set-role`, `media list/get/import/delete`, `comment list/get/create/update/delete/approve/unapprove/spam/unspam/trash`, `term list/get/create/update/delete`, plus `category` and `tag` aliases).
 
 **Modules**:
 - `cli.py` — Command parsing, dispatches to other modules
@@ -44,11 +44,13 @@ CI runs on ubuntu/macos/windows across Python 3.9, 3.11, 3.12, 3.13. The require
 - `publish.py` — Parses YAML frontmatter from markdown files, converts to HTML, creates pages via `WPApiClient`. Default status is `draft`
 - `user.py` — User CRUD operations against `/wp-json/wp/v2/users`. Uses `WPApiClient` for all requests. Supports `list`, `get`, `create`, `update`, `delete`, and `set-role` (shortcut for changing a user's role)
 - `media.py` — Media CRUD operations against `/wp-json/wp/v2/media`. Uses `WPApiClient` for all requests. Supports `list` (with `--media-type`/`--mime-type` filters), `get`, `import` (multipart upload from a local file with optional title/alt-text/caption/description/post), and `delete` (trash-aware, `--force` to permanently delete)
+- `comment.py` — Comment CRUD and moderation against `/wp-json/wp/v2/comments`. Supports `list` (filter by post, status, parent, author email, search), `get`, `create`, `update`, `delete` (trash-aware, `--force` to permanently delete), plus moderation shortcuts `approve`, `unapprove`, `spam`, `unspam`, `trash`
+- `term.py` — Taxonomy term CRUD against `/wp-json/wp/v2/{categories,tags,<custom>}`. One module handles built-in taxonomies (`category` → `categories`, `post_tag` → `tags`) and custom taxonomies (passed through by slug). The CLI exposes `wpa term --taxonomy <slug>` plus thin `wpa category` / `wpa tag` aliases that pre-set the taxonomy. Term `delete` is always permanent (the REST API does not support trashing terms).
 - `formatter.py` — Shared output formatting (table, json, csv, tsv) with column selection via `--fields`, plus `--ids`, `--count`, `--field` output modifiers
 
 **Global flags**: `--debug` (HTTP request/response details) available on all commands. `--site` selects a named site config.
 
-**Tests**: All in `tests/` (311 tests), use `unittest.mock` to mock HTTP requests. No live WordPress connection needed.
+**Tests**: All in `tests/` (402 tests), use `unittest.mock` to mock HTTP requests. No live WordPress connection needed.
 
 ## Key Conventions
 
