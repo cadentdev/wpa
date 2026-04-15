@@ -1,12 +1,12 @@
 # WPA — WordPress Automation
 
 [![CI](https://github.com/cadentdev/wpa/actions/workflows/ci.yml/badge.svg)](https://github.com/cadentdev/wpa/actions/workflows/ci.yml)
-[![Coverage](https://img.shields.io/badge/coverage-75%25-yellow)](https://github.com/cadentdev/wpa)
+[![Coverage](https://img.shields.io/badge/coverage-99%25-brightgreen)](https://github.com/cadentdev/wpa)
 [![Python](https://img.shields.io/badge/python-3.9%2B-blue)](https://www.python.org)
 [![PyPI](https://img.shields.io/pypi/v/wpa)](https://pypi.org/project/wpa/)
 [![License: MIT](https://img.shields.io/badge/license-MIT-green)](LICENSE)
 
-CLI tool for WordPress automation — manage posts, pages, users, and media via the REST API.
+CLI tool for WordPress automation — manage posts, pages, users, media, comments, and taxonomy terms via the REST API.
 
 ## Install
 
@@ -143,6 +143,65 @@ wpa media delete 123 --site mysite --force
 ```
 
 Output formats: `table` (default), `json`, `csv`, `tsv`. Use `--fields` to select columns (available: `id`, `username`, `email`, `first_name`, `last_name`, `display_name`, `roles`, `registered`, `url`).
+
+### Manage comments
+
+```bash
+# List comments (default shows approved only; filter by status, post, author)
+wpa comment list --site mysite
+wpa comment list --site mysite --status hold
+wpa comment list --site mysite --post 42 --status approved
+wpa comment list --site mysite --author-email "reviewer@example.com"
+
+# Get a single comment
+wpa comment get 123 --site mysite
+
+# Create a comment
+wpa comment create --site mysite --post 42 --content "<p>Thanks for posting!</p>" \
+    --author-name "Reviewer" --author-email "reviewer@example.com"
+
+# Update comment content or metadata
+wpa comment update 123 --site mysite --content "<p>Edited.</p>"
+
+# Moderation shortcuts (wp-cli parity)
+wpa comment approve   123 --site mysite
+wpa comment unapprove 123 --site mysite   # move back to "hold"
+wpa comment spam      123 --site mysite
+wpa comment unspam    123 --site mysite   # restore from spam to approved
+wpa comment trash     123 --site mysite   # soft delete
+
+# Hard delete (moves to trash by default; --force skips trash)
+wpa comment delete 123 --site mysite
+wpa comment delete 123 --site mysite --force
+```
+
+### Manage taxonomy terms (categories, tags, custom)
+
+```bash
+# Categories via the alias (pre-sets --taxonomy=category)
+wpa category list --site mysite
+wpa category list --site mysite --search "news"
+wpa category create --site mysite --name "Announcements" --description "Site announcements"
+wpa category update 7 --site mysite --description "Major site announcements"
+wpa category delete 7 --site mysite   # always permanent; terms cannot be trashed
+
+# Tags via the alias (pre-sets --taxonomy=post_tag)
+wpa tag list --site mysite
+wpa tag create --site mysite --name "wordpress" --description "Posts about WordPress"
+wpa tag delete 12 --site mysite
+
+# Generic term interface for built-in or custom taxonomies
+wpa term list --site mysite --taxonomy category
+wpa term list --site mysite --taxonomy post_tag
+wpa term list --site mysite --taxonomy genre      # custom taxonomy
+
+wpa term get 7 --site mysite --taxonomy category
+wpa term create --site mysite --taxonomy post_tag --name "api"
+wpa term update 7 --site mysite --taxonomy category --name "Big Announcements"
+wpa term delete 7 --site mysite --taxonomy category
+```
+
+**Note on `delete`:** The WordPress REST API does not support trashing taxonomy terms, so `wpa term delete` (and the `category` / `tag` aliases) always performs a permanent delete. There is no `--force` flag — force is implicit.
 
 ### Output options
 

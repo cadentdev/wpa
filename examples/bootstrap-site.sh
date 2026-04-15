@@ -10,8 +10,11 @@
 #      staging environments, using nothing but `wpa` CLI invocations.
 #
 #   2. A SMOKE TEST that exercises every user-facing wpa command we shipped
-#      through v0.7.0 — user CRUD + role management, media upload, page
-#      CRUD with media embedding, and post CRUD with media embedding.
+#      through v0.8.0 — user CRUD + role management, media upload, page
+#      CRUD with media embedding, post CRUD with media embedding, comment
+#      CRUD + moderation, and taxonomy term CRUD (categories and tags via
+#      both the generic `wpa term` interface and the `wpa category` / `wpa
+#      tag` aliases).
 #
 # The script is creation-only by design. It does NOT delete the user,
 # posts, pages, or media items it creates. The intended reset pattern
@@ -115,7 +118,7 @@ done
 # -----------------------------------------------------------------------------
 
 # Verify wpa is on PATH. We don't version-check — this script targets the
-# v0.7.0 command surface and will fail loudly on any missing subcommand
+# v0.8.0 command surface and will fail loudly on any missing subcommand
 # via `set -e` if run against an older wpa.
 command -v wpa >/dev/null 2>&1 || {
     echo "Error: wpa not found on PATH." >&2
@@ -443,7 +446,217 @@ wpa post list --site "${SITE}" --status publish
 echo
 
 # =============================================================================
-# 5. SUMMARY
+# 5. COMMENTS  (v0.8.0)
+# =============================================================================
+# Exercises the following wpa subcommands:
+#
+#   - wpa comment create    (NEW in v0.8.0)
+#   - wpa comment get       (NEW in v0.8.0)
+#   - wpa comment list      (NEW in v0.8.0 — with filters and output modifiers)
+#   - wpa comment update    (NEW in v0.8.0)
+#   - wpa comment approve   (NEW in v0.8.0 — moderation shortcut)
+#   - wpa comment unapprove (NEW in v0.8.0 — moderation shortcut)
+#   - wpa comment spam      (NEW in v0.8.0 — moderation shortcut)
+#   - wpa comment unspam    (NEW in v0.8.0 — moderation shortcut)
+#   - wpa comment trash     (NEW in v0.8.0 — moderation shortcut)
+#   - wpa comment delete    (NEW in v0.8.0 — with --force for permanent)
+#
+# What this tests/demonstrates:
+#
+#   - Creating a comment against the Featured post from Section 4
+#   - Fetching the comment back to verify the create round-tripped
+#   - Walking the moderation state machine (approve → unapprove →
+#     spam → unspam → back to approved) and asserting each transition
+#   - Updating comment content after create
+#   - Filtering the comment list by status and by post
+#   - Trashing and then permanently deleting (cleaned up at the end of
+#     the section so the comment doesn't linger as smoke-test cruft;
+#     everything else the script creates is left in place by design,
+#     but a thread of test comments per run would clutter the
+#     moderation queue across re-runs)
+
+echo "=== 5. Comments ==="
+echo
+
+# Create a comment against the Featured post (which is in 'publish' status
+# from Section 4, so it accepts comments).
+echo "Creating comment on Featured post ${FEATURED_ID}..."
+COMMENT_CREATE_OUT=$(wpa comment create \
+    --site "${SITE}" \
+    --post "${FEATURED_ID}" \
+    --content "<p>Great post! Signed by the <code>${PREFIX}</code> smoke test.</p>" \
+    --author-name "${PREFIX} Reviewer" \
+    --author-email "${PREFIX}-reviewer@example.test")
+echo "$COMMENT_CREATE_OUT"
+COMMENT_ID=$(echo "$COMMENT_CREATE_OUT" | extract_id)
+echo "Comment ID=${COMMENT_ID}"
+echo
+
+# Fetch the comment back — tests `wpa comment get`.
+echo "Fetching comment ${COMMENT_ID} via 'wpa comment get'..."
+wpa comment get "${COMMENT_ID}" --site "${SITE}"
+echo
+
+# Walk the moderation state machine. Each call is a thin wrapper over a
+# status update, but we want to make sure every shortcut is wired all the
+# way through to the REST API.
+
+echo "Holding comment (unapprove)..."
+wpa comment unapprove "${COMMENT_ID}" --site "${SITE}"
+echo
+
+echo "Marking comment as spam..."
+wpa comment spam "${COMMENT_ID}" --site "${SITE}"
+echo
+
+echo "Restoring from spam..."
+wpa comment unspam "${COMMENT_ID}" --site "${SITE}"
+echo
+
+echo "Approving comment..."
+wpa comment approve "${COMMENT_ID}" --site "${SITE}"
+echo
+
+# Update the comment's content via `wpa comment update`.
+echo "Updating comment content..."
+wpa comment update "${COMMENT_ID}" \
+    --site "${SITE}" \
+    --content "<p>Updated by the ${PREFIX} smoke test at $(date -u +%FT%TZ).</p>"
+echo
+
+# List comments filtered by post and status — exercises the most common
+# filter combinations.
+echo "Listing comments on Featured post ${FEATURED_ID}..."
+wpa comment list --site "${SITE}" --post "${FEATURED_ID}" --status approved
+echo
+
+# Trash then force-delete. This is the one piece of smoke-test content
+# we actively clean up so re-runs don't accumulate dead comments.
+echo "Trashing comment ${COMMENT_ID}..."
+wpa comment trash "${COMMENT_ID}" --site "${SITE}"
+echo
+
+echo "Permanently deleting comment ${COMMENT_ID}..."
+wpa comment delete "${COMMENT_ID}" --site "${SITE}" --force
+echo
+
+# =============================================================================
+# 6. TAXONOMY TERMS — CATEGORIES AND TAGS  (v0.8.0)
+# =============================================================================
+# Exercises the following wpa subcommands:
+#
+#   - wpa category create   (NEW in v0.8.0 — alias for 'term --taxonomy=category')
+#   - wpa category list     (NEW in v0.8.0)
+#   - wpa tag create        (NEW in v0.8.0 — alias for 'term --taxonomy=post_tag')
+#   - wpa tag list          (NEW in v0.8.0)
+#   - wpa term create       (NEW in v0.8.0 — generic taxonomy creator)
+#   - wpa term list         (NEW in v0.8.0)
+#   - wpa term get          (NEW in v0.8.0)
+#   - wpa term update       (NEW in v0.8.0)
+#   - wpa term delete       (NEW in v0.8.0 — always permanent; terms
+#                           cannot be trashed in the REST API)
+#
+# What this tests/demonstrates:
+#
+#   - Creating a category via the `wpa category` alias (pre-sets
+#     --taxonomy=category so the user doesn't have to)
+#   - Creating a tag via the `wpa tag` alias (pre-sets --taxonomy=post_tag)
+#   - Creating a second category via the generic `wpa term --taxonomy=category`
+#     form to prove the alias and the generic path hit the same endpoint
+#   - Listing categories and tags separately
+#   - Updating a term's description after create
+#   - Deleting a term — which is always a permanent delete, not a trash
+
+echo "=== 6. Taxonomy terms (categories and tags) ==="
+echo
+
+# Create a category via the alias. The prefix keeps runs distinct.
+echo "Creating category via 'wpa category create'..."
+CAT_CREATE_OUT=$(wpa category create \
+    --site "${SITE}" \
+    --name "${PREFIX} Alias Category" \
+    --description "Created via the wpa category alias in the bootstrap smoke test.")
+echo "$CAT_CREATE_OUT"
+CAT_ID=$(echo "$CAT_CREATE_OUT" | extract_id)
+echo "Category ID=${CAT_ID}"
+echo
+
+# Create a second category via the generic term interface — both should
+# hit /wp/v2/categories.
+echo "Creating second category via 'wpa term create --taxonomy=category'..."
+CAT2_CREATE_OUT=$(wpa term create \
+    --site "${SITE}" \
+    --taxonomy category \
+    --name "${PREFIX} Generic Category" \
+    --description "Created via the wpa term generic interface.")
+echo "$CAT2_CREATE_OUT"
+CAT2_ID=$(echo "$CAT2_CREATE_OUT" | extract_id)
+echo "Category ID=${CAT2_ID}"
+echo
+
+# Create a tag via the alias.
+echo "Creating tag via 'wpa tag create'..."
+TAG_CREATE_OUT=$(wpa tag create \
+    --site "${SITE}" \
+    --name "${PREFIX}-alias-tag" \
+    --description "Created via the wpa tag alias.")
+echo "$TAG_CREATE_OUT"
+TAG_ID=$(echo "$TAG_CREATE_OUT" | extract_id)
+echo "Tag ID=${TAG_ID}"
+echo
+
+# Create a second tag via the generic term interface with post_tag.
+echo "Creating second tag via 'wpa term create --taxonomy=post_tag'..."
+TAG2_CREATE_OUT=$(wpa term create \
+    --site "${SITE}" \
+    --taxonomy post_tag \
+    --name "${PREFIX}-generic-tag")
+echo "$TAG2_CREATE_OUT"
+TAG2_ID=$(echo "$TAG2_CREATE_OUT" | extract_id)
+echo "Tag ID=${TAG2_ID}"
+echo
+
+# Fetch the alias category back — tests `wpa term get` with the --taxonomy
+# flag. We use the generic form here to prove term get works across
+# taxonomies (the alias also works, but we already tested alias-create).
+echo "Fetching category ${CAT_ID} via 'wpa term get --taxonomy=category'..."
+wpa term get "${CAT_ID}" --site "${SITE}" --taxonomy category
+echo
+
+# Update the alias category's description.
+echo "Updating category ${CAT_ID} description via 'wpa category update'..."
+wpa category update "${CAT_ID}" \
+    --site "${SITE}" \
+    --description "Updated by the ${PREFIX} smoke test."
+echo
+
+# List categories (via alias) and tags (via alias) to confirm the new items
+# show up.
+echo "Listing categories via 'wpa category list'..."
+wpa category list --site "${SITE}" --search "${PREFIX}"
+echo
+
+echo "Listing tags via 'wpa tag list'..."
+wpa tag list --site "${SITE}" --search "${PREFIX}"
+echo
+
+# Clean up one of each (generic category + generic tag) to prove that
+# `wpa term delete` hits the correct endpoint and always force-deletes.
+# We leave the alias-created category and tag in place so the summary
+# table and the WordPress admin reflect a non-empty smoke-test footprint,
+# consistent with the "the script creates and the rollback resets"
+# baseline model.
+
+echo "Deleting generic category ${CAT2_ID} (always permanent)..."
+wpa term delete "${CAT2_ID}" --site "${SITE}" --taxonomy category
+echo
+
+echo "Deleting generic tag ${TAG2_ID} (always permanent)..."
+wpa term delete "${TAG2_ID}" --site "${SITE}" --taxonomy post_tag
+echo
+
+# =============================================================================
+# 7. SUMMARY
 # =============================================================================
 
 echo "============================================================"
@@ -455,24 +668,34 @@ echo
 # Use printf with fixed-width ID column (%-6s) so summary stays aligned
 # regardless of whether IDs are 1, 2, 3, or 4 digits. Titles are left-
 # aligned and free-form.
-printf "  %-10s ID=%-6s %s\n" "User"   "${USER_ID}"        "username=${USER_USERNAME} (editor)"
-printf "  %-10s ID=%-6s %s\n" "Media"  "${MEDIA_HERO_ID}"  "title=${PREFIX}: Hero image"
-printf "  %-10s ID=%-6s %s\n" "Media"  "${MEDIA_THUMB_ID}" "title=${PREFIX}: Thumbnail image"
-printf "  %-10s ID=%-6s %s\n" "Page"   "${ABOUT_ID}"       "title=${PREFIX}: About (updated)"
-printf "  %-10s ID=%-6s %s\n" "Page"   "${GALLERY_ID}"     "title=${PREFIX}: Gallery"
-printf "  %-10s ID=%-6s %s\n" "Post"   "${WELCOME_ID}"     "title=${PREFIX}: Welcome"
-printf "  %-10s ID=%-6s %s\n" "Post"   "${FEATURED_ID}"    "title=${PREFIX}: Featured post"
+printf "  %-10s ID=%-6s %s\n" "User"     "${USER_ID}"        "username=${USER_USERNAME} (editor)"
+printf "  %-10s ID=%-6s %s\n" "Media"    "${MEDIA_HERO_ID}"  "title=${PREFIX}: Hero image"
+printf "  %-10s ID=%-6s %s\n" "Media"    "${MEDIA_THUMB_ID}" "title=${PREFIX}: Thumbnail image"
+printf "  %-10s ID=%-6s %s\n" "Page"     "${ABOUT_ID}"       "title=${PREFIX}: About (updated)"
+printf "  %-10s ID=%-6s %s\n" "Page"     "${GALLERY_ID}"     "title=${PREFIX}: Gallery"
+printf "  %-10s ID=%-6s %s\n" "Post"     "${WELCOME_ID}"     "title=${PREFIX}: Welcome"
+printf "  %-10s ID=%-6s %s\n" "Post"     "${FEATURED_ID}"    "title=${PREFIX}: Featured post"
+printf "  %-10s ID=%-6s %s\n" "Category" "${CAT_ID}"         "name=${PREFIX} Alias Category (updated)"
+printf "  %-10s ID=%-6s %s\n" "Tag"      "${TAG_ID}"         "name=${PREFIX}-alias-tag"
 echo
-echo "To clean up manually (the bootstrap script does not delete anything):"
+echo "Created and then deleted during the run (v0.8.0 surface):"
+echo
+printf "  %-10s          %s\n" "Comment"  "on Featured post — trashed then force-deleted"
+printf "  %-10s          %s\n" "Category" "${PREFIX} Generic Category — force-deleted"
+printf "  %-10s          %s\n" "Tag"      "${PREFIX}-generic-tag — force-deleted"
+echo
+echo "To clean up manually (the bootstrap script leaves the items above in place):"
 echo
 # Same %-6s trick for the cleanup commands so the --site flag lines up.
-printf "  wpa post   delete %-6s --site %s --force\n"    "${WELCOME_ID}"     "${SITE}"
-printf "  wpa post   delete %-6s --site %s --force\n"    "${FEATURED_ID}"    "${SITE}"
-printf "  wpa page   delete %-6s --site %s --force\n"    "${ABOUT_ID}"       "${SITE}"
-printf "  wpa page   delete %-6s --site %s --force\n"    "${GALLERY_ID}"     "${SITE}"
-printf "  wpa media  delete %-6s --site %s --force\n"    "${MEDIA_HERO_ID}"  "${SITE}"
-printf "  wpa media  delete %-6s --site %s --force\n"    "${MEDIA_THUMB_ID}" "${SITE}"
-printf "  wpa user   delete %-6s --site %s --reassign 1\n" "${USER_ID}"      "${SITE}"
+printf "  wpa post     delete %-6s --site %s --force\n"    "${WELCOME_ID}"     "${SITE}"
+printf "  wpa post     delete %-6s --site %s --force\n"    "${FEATURED_ID}"    "${SITE}"
+printf "  wpa page     delete %-6s --site %s --force\n"    "${ABOUT_ID}"       "${SITE}"
+printf "  wpa page     delete %-6s --site %s --force\n"    "${GALLERY_ID}"     "${SITE}"
+printf "  wpa media    delete %-6s --site %s --force\n"    "${MEDIA_HERO_ID}"  "${SITE}"
+printf "  wpa media    delete %-6s --site %s --force\n"    "${MEDIA_THUMB_ID}" "${SITE}"
+printf "  wpa category delete %-6s --site %s\n"            "${CAT_ID}"         "${SITE}"
+printf "  wpa tag      delete %-6s --site %s\n"            "${TAG_ID}"         "${SITE}"
+printf "  wpa user     delete %-6s --site %s --reassign 1\n" "${USER_ID}"      "${SITE}"
 echo
 echo "Or, for a release-gate smoke test: roll back the target container"
 echo "to its baseline snapshot (e.g. via an ansible playbook that runs"

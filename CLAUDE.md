@@ -50,7 +50,7 @@ CI runs on ubuntu/macos/windows across Python 3.9, 3.11, 3.12, 3.13. The require
 
 **Global flags**: `--debug` (HTTP request/response details) available on all commands. `--site` selects a named site config.
 
-**Tests**: All in `tests/` (402 tests), use `unittest.mock` to mock HTTP requests. No live WordPress connection needed.
+**Tests**: All in `tests/` (405 tests), use `unittest.mock` to mock HTTP requests. No live WordPress connection needed.
 
 ## Key Conventions
 

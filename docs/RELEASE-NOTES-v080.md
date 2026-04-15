@@ -42,13 +42,18 @@
 
 ## Scope — Deferred
 
-Phase 4 in the roadmap also called for a **reusable meta handler** (shared logic for `meta add/get/update/delete/list` across post/page/comment/term/user). This has been **deferred to a follow-up sprint** pending a closer look at how REST-exposed meta varies across sites and plugins. No meta commands ship in v0.8.0.
+Phase 4 in the roadmap also called for a **reusable meta handler** (shared logic for `meta add/get/update/delete/list` across post/page/comment/term/user). This has been **deferred to a follow-up sprint** pending a closer look at how REST-exposed meta varies across sites and plugins. Tracked as [#33](https://github.com/cadentdev/wpa/issues/33). Two other follow-ups were also filed during the v0.8.0 FeatureDev cycle: [#34 `wpa comment count`](https://github.com/cadentdev/wpa/issues/34) and [#35 `wpa term merge`](https://github.com/cadentdev/wpa/issues/35). No meta, count, or merge commands ship in v0.8.0.
+
+## Bug fixes
+
+- **`term._resolve_endpoint` case normalization.** The taxonomy slug regex used `re.IGNORECASE`, so mixed-case input (`POST_TAG`, `Category`, `Genre`) passed validation — but the `_TAXONOMY_ENDPOINTS` lookup was case-sensitive, so those inputs fell through to `/wp/v2/POST_TAG` (404) instead of `/wp/v2/tags`. Now normalizes to lowercase before lookup. Three regression tests cover the fix. Caught during the Phase 4 refactor pass.
 
 ## Quality
 
-- **Tests:** 402 total, **+91 new** (44 in `test_comment.py`, 47 in `test_term.py`). All TDD-first — tests written against the public API of each module before the implementation existed, then iterated red → green → refactor.
+- **Tests:** 405 total, **+94 new** (44 in `test_comment.py`, 50 in `test_term.py`). All TDD-first — tests written against the public API of each module before the implementation existed, then iterated red → green → refactor.
 - **Coverage:** `wpa/comment.py` and `wpa/term.py` at **100% line coverage**; overall package at **99%**.
 - **Lint:** `ruff check .` clean, `ruff format --check .` clean.
+- **Security:** `bandit -r wpa/` clean (0 findings across 3100 LOC). `pip-audit` clean after upgrading dev venv to `requests 2.33.1`, `cryptography 46.0.7`, `pygments 2.20.0`, `pytest 9.0.3`. Runtime deps in `pyproject.toml` remain unpinned so end-users on fresh install always pull the patched versions.
 - **No regressions:** Full suite (`test_api`, `test_post`, `test_page`, `test_user`, `test_media`, `test_formatter`, `test_wp_publish`, `test_comment`, `test_term`) passes after CLI rewiring.
 - **No new runtime dependencies.**
 
@@ -58,19 +63,21 @@ Phase 4 in the roadmap also called for a **reusable meta handler** (shared logic
 - `wpa/term.py` (new)
 - `tests/test_comment.py` (new)
 - `tests/test_term.py` (new)
-- `wpa/cli.py` — imports, 7 new handler functions, 3 new top-level subparsers (`comment`, `term`, `category`, `tag`) built via a shared `_add_term_subparsers` factory for the three taxonomy-oriented parsers
+- `wpa/cli.py` — imports, 14 new handler functions, 4 new top-level subparsers (`comment`, `term`, `category`, `tag`); the three taxonomy-oriented parsers share a `_add_term_subparsers` factory
 - `CLAUDE.md` — module list and test count updated
+- `README.md` — usage sections for comments and terms, coverage badge refreshed
+- `examples/bootstrap-site.sh` — v0.8.0 smoke test sections 5 (comments) and 6 (terms/categories/tags)
 
 ## Closes
 
 - Phase 4 (comment + term + category/tag aliases) from `wpa-prd.md`
-- Meta handler portion of Phase 4 remains open for a follow-up sprint
+- Meta handler portion of Phase 4 → tracked as [#33](https://github.com/cadentdev/wpa/issues/33)
 
 ## Release Checklist (pre-tag)
 
 - [ ] Bump `wpa/__init__.py` version to `0.8.0`
 - [ ] Move this file's contents into `RELEASE-NOTES.md` as the new top entry
 - [ ] Update `wpa-prd.md` Phase 4 row to **COMPLETE** (with a note that meta is deferred)
-- [ ] Run `bandit` and `pip-audit` and record results in the "Quality" section
-- [ ] Live-test `wpa comment list`, `wpa category list`, `wpa tag create`, `wpa comment approve` against a staging WordPress site
+- [x] Run `bandit` and `pip-audit` and record results in the "Quality" section
+- [ ] Live-test `examples/bootstrap-site.sh` against CT 118 (wp-stage-18 @ 192.168.52.18) after rollback to the `wpa-baseline` snapshot, exercising the full v0.8.0 surface (user/media/page/post/comment/term/category/tag)
 - [ ] Tag `v0.8.0` and publish to PyPI
