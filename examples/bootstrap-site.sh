@@ -262,14 +262,20 @@ echo
 echo "=== 2. Media library ==="
 echo
 
-# Generate two tiny PNG files in a temp directory. We embed a minimal
-# 1x1 PNG as base64 so this script has no external fixture dependencies —
-# anything that can run bash and base64 can run this script.
+# Generate two PNG fixture files in a temp directory. We embed a 256x256
+# PNG as base64 so this script has no external fixture dependencies — any
+# host that can run bash and base64 can run this script. The fixture is
+# deliberately a recognizable "placeholder" (a red block with a white X
+# marking both diagonals) so it's obvious when browsing the rendered site
+# that the content was created by a smoke test, not a real upload. The
+# base64 payload below is ~1.8 KB. Generated with a hand-rolled stdlib
+# PNG writer (struct + zlib) so regenerating it needs no external tools.
 TMPDIR=$(mktemp -d)
 trap 'rm -rf "$TMPDIR"' EXIT
 
-# A valid 1x1 red PNG, ~67 bytes binary.
-PNG_B64='iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR4nGP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg=='
+# A valid 256x256 RGB PNG: deep-red block (0xD02020) with 32px-wide white
+# X across both diagonals. Compressed size ~1.4 KB binary, ~1.8 KB base64.
+PNG_B64='iVBORw0KGgoAAAANSUhEUgAAAQAAAAEACAIAAADTED8xAAAFMUlEQVR42u3bW04bARQE0V4K+19NdkSSrygRCdh4iGfqWPWNNX2rJB5mrze+vr28AE/LrT7v9faXlXEN++8MQAO4hv33B6ABXMD+TwWgAZzd/s8GoAGc2v4HBKABnNf+xwSgAZzU/ocFoAGc0f5HBqABnM7+BwegAZzL/scHoAGcyP5DAtAAzmL/UQFoAKew/8AANIDnt//YADSAJ7f/ZwBHv4H74Wnt//H19zVvAzyh/b8C0ACC9v8WgAZQs//PADSAlP1vBKABdOx/OwANIGL/XwPQAAr2/ysADeDy9r8TgAZwbfvfD0ADuLD9HwpAA7iq/R8NQAO4pP03BKABXM/+2wLQAC5m/80BaABXsv+eADSAy9h/ZwAawGW02ZUeBuz/ugA0gAuosqs+GNj/FQFoAKfWY4WHBPuPDUADOKkSqz0w2H9UABrA6TRY+eERt/+QADTA/hOdfoZA+egzB8rnnlFQPvRMg/KJZyCUjzszoXzWGQvlg85kKJ9yhkP5iDMfyuebEVE+3EyJ8slmUJSPNbOifKYZF+UDzcQon2aGRvkoMzfK55jRUT7ETI/yCeYAKI8/Z0B59jkGyoPPSVCeeg6D8shzHvaX550jsb887Jwq24BJzxSAgxmzHoCzmbEegOMZsB6AE5quHoBDGq0egHOaqx6AoxqqHoDTmqgegAMbpx6AM5ulHoBjG6QegJOboh6AwxuhHoDzs78eQFkC9gugqwL7BdAVgv0C6GrBfgF05WC/ALqKsF8AXVHYL4CuLuwXQFca9gugqw77BdAViP0C6GrEfgF0ZWK/ALpKsV8A3QbYL4BuA+wXQLcB9gug2wD7BdBtgP0C6DbAfgF0G2C/ALoNsF8A3QbYL4BuA+wXQLcB9gug2wD7BdBtgP0C0AD7BaAB9gtAA+wXgAbYLwANsF8AGmC/ADTAfgFogP0C0AD7BaAB9gtAA+wXQLwBmwug24C1BdBtwM4C6DZgYQEIAALwLRAE4IdgCMCvQSEAfwiDAHwUAgLwYTgIwMehIQD/EAMB+JdICCBgvwYEULdfAwKo268BAdTt14AA6vZrQAB1+zUggBPY/2VvAQE8qf0aEEDdfg0IoG6/BgRQt18DAqjbrwEB1O3XgADq9mtAAHX7NSCAuv0aEEDdfg0IoG6/BgRQt18DAqjbrwEBkEkDAqCRBgRAIA0IoK6OBgRQl0YDAqjrogEB1EXRgADqimhAAHU5NCCAuhYaEEBdCA0IoK6CBgRQl0AD6QCc3wjdABzeFN0AnNwg3QAc2yzdAJzZON0AHNhE3QCc1lDdABzVXN0AnNNo3QAc0nTdAJzQgN0AHM+M3QCczZjdABzMpN0AnMqw3QAcybzdANhv5G4A7Dd1NwD2G7wbAPvN3g2A/cbvBsB+J+gGwH6H6AbAfg10A2C/BroBsF8D3QDYr4FuAOzXQDcA9mvgvx9rBkX5ZDMlyoebEVE+38yH8hFnOJRPOZOhfNAZC+WzzkwoH3cGQvnEMw3Kh55RUD73zIHy0WcIlE8/E6AswNiPcgNjP8oNjP0oNzD2o9zA2I9yA2M/yg2M/Sg3MPaj3MDYj3IDYz/KDYz9KDcw9qPcwNiPcgNjP8oNjP0oNzD2o9zA2I9yA2M/yg2M/Sg3MPaj3MDYj3IDYz/KDYz9KDcw9qPcwNiPcgNjP8oNjP0oNzD2o9zA2I9yA2M/yg2M/Sg3MPaj3MDYj3IDYz/KDYz9KDcw9qPcwNiPcgNjP8oNjP0oNzD2o9zA2I9yA2M/yg18B9POQ8HC/W35AAAAAElFTkSuQmCC'
 
 echo "Writing two tiny PNG fixtures to ${TMPDIR}..."
 echo "$PNG_B64" | base64 -d > "${TMPDIR}/${PREFIX}-hero.png"
