@@ -6,16 +6,16 @@
 **Resumed:** 2026-04-15 (local session, flicky)
 **PRD reference:** `wpa-prd.md` §7 Phase 4
 
-## Current Phase: 4 — Refactor
+## Current Phase: 6 — Create PR
 
 | Phase | Status | Notes |
 |-------|--------|-------|
 | 1. Describe Feature | [x] | No GH issue — worked from PRD directly. Per Neil, agreed. |
 | 2. Implementation Plan | [x] | CCW followed PRD §6.2 Tier 2 + §7 Phase 4 as the plan. |
 | 3. Implement & Test | [x] | TDD red→green. 91 new tests. `wpa/comment.py` + `wpa/term.py` + `tests/test_comment.py` + `tests/test_term.py` + `wpa/cli.py` wiring. Commits `d36b146`, `b88b057`. Meta handler **deferred** to follow-up (agreed). |
-| 4. Refactor | [~] | Resume here. Need to audit for dead code, dup logic, import ordering, type annotations, edge cases in `_resolve_endpoint` and the comment moderation wrappers. |
-| 5. Light Security Review | [ ] | Must run `bandit -r wpa/` + `pip-audit`. Review `_resolve_endpoint` taxonomy slug validation for path traversal. Audit content field handling in comment create/update. |
-| 6. Create PR | [ ] | Branch has never been pushed as a PR. Need to push and open against `main` referencing PRD Phase 4. |
+| 4. Refactor | [x] | Commit `f71ca00`. Caught a real bug in `_resolve_endpoint` — `re.IGNORECASE` on the slug regex accepted `POST_TAG`/`Category` but the case-sensitive `_TAXONOMY_ENDPOINTS` lookup fell through, routing to `/wp/v2/POST_TAG` (404). Fix lowercases before lookup. Also deduped `_extract_rendered` in `comment.py` by importing from `wpa.post` (matches the `page.py` precedent). Added 3 TDD tests. 405 tests, 99% coverage. |
+| 5. Light Security Review | [x] | `bandit -r wpa/` — **zero findings** (3100 LOC scanned). `pip-audit` — upgraded venv: `requests 2.33.1`, `cryptography 46.0.7`, `pygments 2.20.0`, `pytest 9.0.3`. Runtime deps in pyproject are unpinned so end-users always pull patched versions on fresh install. Manual audit: `_resolve_endpoint` regex rejects `/`, `..`, shell metacharacters; all ID validators reject bool + non-positive; no eval/exec/subprocess/file-I/O in new modules; REST body fields passed through (kses server-side). No vulnerabilities found. |
+| 6. Create PR | [~] | Resume here. Branch `claude/phase-4-tdd-implementation-vJMmZ` never pushed as PR. Open against `main` referencing PRD Phase 4 and `docs/RELEASE-NOTES-v080.md`. |
 | 7. Team Review | [ ] | |
 | 8. Docs & Help | [ ] | Three sub-tasks: (a) update `examples/bootstrap-site.sh` with new comment + term sections for v0.8.0 smoke test, (b) update README.md + verify `--help` text + draft RELEASE-NOTES.md entry from the existing `docs/RELEASE-NOTES-v080.md`, (c) live smoke test on rolled-back CT 118. |
 | 9. Retrospective | [ ] | |
