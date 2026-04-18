@@ -54,7 +54,11 @@ def _validate_media_id(media_id):
     Raises:
         ValueError: If media_id is not a positive integer.
     """
-    if not isinstance(media_id, int) or media_id < 1:
+    if (
+        isinstance(media_id, bool)
+        or not isinstance(media_id, int)
+        or media_id < 1
+    ):
         raise ValueError(f"Invalid media ID: {media_id}")
 
 

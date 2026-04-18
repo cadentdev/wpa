@@ -90,3 +90,8 @@ Then run full suite:
 
 - Updated tests in `tests/`.
 - TDD run log and outcomes in `docs/remediation-test-results.md`.
+
+## Status Update
+
+- Bool-ID validation remediation has been completed in source validators for post, media, page, and user modules.
+- Green-phase verification is complete (targeted bool-ID tests pass, and remediation subset reports `418 passed`).

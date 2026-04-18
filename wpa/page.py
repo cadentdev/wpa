@@ -53,7 +53,11 @@ def _validate_page_id(page_id):
     Raises:
         ValueError: If page_id is not a positive integer.
     """
-    if not isinstance(page_id, int) or page_id < 1:
+    if (
+        isinstance(page_id, bool)
+        or not isinstance(page_id, int)
+        or page_id < 1
+    ):
         raise ValueError(f"Invalid page ID: {page_id}")
 
 

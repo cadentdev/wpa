@@ -53,7 +53,11 @@ def _validate_post_id(post_id):
     Raises:
         ValueError: If post_id is not a positive integer.
     """
-    if not isinstance(post_id, int) or post_id < 1:
+    if (
+        isinstance(post_id, bool)
+        or not isinstance(post_id, int)
+        or post_id < 1
+    ):
         raise ValueError(f"Invalid post ID: {post_id}")
 
 

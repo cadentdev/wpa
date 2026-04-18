@@ -49,7 +49,11 @@ def _validate_user_id(user_id):
     Raises:
         ValueError: If user_id is not a positive integer.
     """
-    if not isinstance(user_id, int) or user_id < 1:
+    if (
+        isinstance(user_id, bool)
+        or not isinstance(user_id, int)
+        or user_id < 1
+    ):
         raise ValueError(f"Invalid user ID: {user_id}")
 
 
