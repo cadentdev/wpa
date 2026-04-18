@@ -9,6 +9,7 @@ from wpa.page import (
     AVAILABLE_FIELDS,
     DEFAULT_FIELDS,
     _extract_page_row,
+    _validate_page_id,
     create_page,
     delete_page,
     get_page,
@@ -92,6 +93,7 @@ class TestListPages:
         mock_client.get_list.return_value = iter([])
         list_pages(mock_client, status="draft")
         params = mock_client.get_list.call_args[1]["params"]
+        assert params["context"] == "edit"
         assert params["status"] == "draft"
 
     def test_passes_search(self, mock_client):
@@ -112,6 +114,12 @@ class TestListPages:
         params = mock_client.get_list.call_args[1]["params"]
         assert params["orderby"] == "menu_order"
         assert params["order"] == "asc"
+
+    def test_passes_per_page(self, mock_client):
+        mock_client.get_list.return_value = iter([])
+        list_pages(mock_client, per_page=25)
+        params = mock_client.get_list.call_args[1]["params"]
+        assert params["per_page"] == 25
 
     def test_specific_page_uses_get(self, mock_client):
         mock_client.get.return_value = [SAMPLE_API_PAGE]
@@ -191,6 +199,12 @@ class TestUpdatePage:
             "pages/10", data={"title": "Updated About"}
         )
 
+    def test_update_multiple_fields(self, mock_client):
+        mock_client.post.return_value = {"id": 10}
+        update_page(mock_client, 10, title="Updated", status="publish", parent=1)
+        data = mock_client.post.call_args[1]["data"]
+        assert data == {"title": "Updated", "status": "publish", "parent": 1}
+
     def test_empty_update_raises(self, mock_client):
         with pytest.raises(ValueError, match="No fields to update"):
             update_page(mock_client, 10)
@@ -216,3 +230,17 @@ class TestDeletePage:
     def test_invalid_page_id(self, mock_client):
         with pytest.raises(ValueError, match="Invalid page ID"):
             delete_page(mock_client, 0)
+
+    def test_invalid_page_id_string(self, mock_client):
+        with pytest.raises(ValueError, match="Invalid page ID"):
+            delete_page(mock_client, "abc")
+
+
+class TestPageIdValidation:
+    def test_bool_rejected(self):
+        with pytest.raises(ValueError, match="Invalid page ID"):
+            _validate_page_id(True)
+
+    def test_false_rejected(self):
+        with pytest.raises(ValueError, match="Invalid page ID"):
+            _validate_page_id(False)

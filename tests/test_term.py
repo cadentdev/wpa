@@ -207,6 +207,14 @@ class TestGetTerm:
         with pytest.raises(ValueError, match="Invalid term ID"):
             get_term(mock_client, "abc")
 
+    def test_invalid_term_id_true_bool(self, mock_client):
+        with pytest.raises(ValueError, match="Invalid term ID"):
+            get_term(mock_client, True)
+
+    def test_invalid_term_id_false_bool(self, mock_client):
+        with pytest.raises(ValueError, match="Invalid term ID"):
+            get_term(mock_client, False)
+
     def test_api_404(self, mock_client):
         mock_client.get.side_effect = WPApiError(404, "not_found", "Not found")
         with pytest.raises(WPApiError):

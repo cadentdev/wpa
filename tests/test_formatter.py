@@ -56,10 +56,11 @@ class TestTableFormat:
     def test_table_columns_aligned(self):
         result = format_output(SAMPLE_ROWS, SAMPLE_COLUMNS, "table")
         lines = result.strip().split("\n")
-        # All lines should have the same column positions (padded)
-        header_parts = lines[0].split()
-        assert header_parts[0] == "id"
-        assert header_parts[1] == "username"
+        header = lines[0]
+        assert header.startswith("id")
+        for line in lines[1:]:
+            assert len(line) == len(header)
+            assert line[0].strip().isdigit()
 
     def test_table_is_default_format(self):
         result_default = format_output(SAMPLE_ROWS, SAMPLE_COLUMNS)
@@ -204,6 +205,9 @@ class TestFormatIds:
         rows = [{"name": "foo"}, {"id": 5}]
         assert format_ids(rows) == " 5"
 
+    def test_none_id_value_stringified(self):
+        assert format_ids([{"id": None}]) == "None"
+
 
 class TestFormatCount:
     def test_basic(self):
@@ -236,3 +240,7 @@ class TestFormatField:
         rows = [{"id": 1}, {"id": 2}]
         result = format_field(rows, "id")
         assert result == "1\n2"
+
+    def test_none_field_value_stringified(self):
+        rows = [{"email": None}]
+        assert format_field(rows, "email") == "None"

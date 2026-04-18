@@ -10,6 +10,7 @@ from wpa.post import (
     DEFAULT_FIELDS,
     _extract_post_row,
     _extract_rendered,
+    _validate_post_id,
     create_post,
     delete_post,
     get_post,
@@ -50,7 +51,7 @@ class TestExtractRendered:
 
     def test_dict_without_rendered(self):
         result = _extract_rendered({"raw": "Hello"})
-        assert isinstance(result, str)
+        assert result == "{'raw': 'Hello'}"
 
     def test_plain_string(self):
         assert _extract_rendered("Hello") == "Hello"
@@ -125,6 +126,7 @@ class TestListPosts:
         mock_client.get_list.return_value = iter([])
         list_posts(mock_client, status="draft")
         params = mock_client.get_list.call_args[1]["params"]
+        assert params["context"] == "edit"
         assert params["status"] == "draft"
 
     def test_passes_author_filter(self, mock_client):
@@ -307,3 +309,13 @@ class TestDeletePost:
         mock_client.delete.side_effect = WPApiError(404, "not_found", "Not found")
         with pytest.raises(WPApiError):
             delete_post(mock_client, 999)
+
+
+class TestPostIdValidation:
+    def test_bool_rejected(self):
+        with pytest.raises(ValueError, match="Invalid post ID"):
+            _validate_post_id(True)
+
+    def test_false_rejected(self):
+        with pytest.raises(ValueError, match="Invalid post ID"):
+            _validate_post_id(False)

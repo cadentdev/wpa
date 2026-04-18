@@ -113,6 +113,7 @@ class TestFromConfig:
         assert c.site_url == "https://blog.example.com"
         assert c.username == "editor"
         assert c.app_password == "yyyy yyyy yyyy"
+        assert c.admin_path == "wp-admin"
         mock_resolve.assert_called_once_with(site_name="myblog")
 
     @patch("wpa.api.resolve_config")
@@ -236,6 +237,10 @@ class TestGet:
         mock_request.assert_called_once()
         args, kwargs = mock_request.call_args
         assert args == ("GET", "https://example.com/wp-json/wp/v2/posts/42")
+        assert kwargs["timeout"] == 30
+        assert kwargs["headers"]["Authorization"].startswith("Basic ")
+        assert kwargs["headers"]["Content-Type"] == "application/json"
+        assert "allow_redirects" not in kwargs
 
     @patch("wpa.api.requests.request")
     def test_get_with_params(self, mock_request, client):
@@ -279,8 +284,14 @@ class TestPost:
 
         result = client.post("posts", data={"title": "Hello", "status": "draft"})
         assert result == {"id": 99}
+        args, kwargs = mock_request.call_args
+        assert args == ("POST", "https://example.com/wp-json/wp/v2/posts")
         _, kwargs = mock_request.call_args
         assert kwargs["json"] == {"title": "Hello", "status": "draft"}
+        assert kwargs["timeout"] == 30
+        assert kwargs["headers"]["Authorization"].startswith("Basic ")
+        assert kwargs["headers"]["Content-Type"] == "application/json"
+        assert kwargs["allow_redirects"] is False
 
     @patch("wpa.api.requests.request")
     def test_post_with_files(self, mock_request, client):
@@ -502,6 +513,13 @@ class TestAuthHeader:
         assert decoded == "admin:xxxx xxxx xxxx"
 
 
+class TestHeaders:
+    def test_headers_include_auth_and_content_type(self, client):
+        headers = client._headers()
+        assert headers["Authorization"].startswith("Basic ")
+        assert headers["Content-Type"] == "application/json"
+
+
 class TestSecurityHardening:
     """Tests for M1-M4 security hardening (added pre-v0.8.0 release)."""
 
@@ -537,8 +555,8 @@ class TestSecurityHardening:
         resp.json.return_value = {"id": 1}
         mock_request.return_value = resp
 
-        # Does not raise.
-        client.get("posts")
+        result = client.get("posts")
+        assert result == {"id": 1}
 
     # --- M2: total_pages cap ---
 
@@ -587,6 +605,42 @@ class TestSecurityHardening:
         mock_request.return_value = resp
 
         client.post("posts", data={"title": "x"})
+        kwargs = mock_request.call_args.kwargs
+        assert kwargs.get("allow_redirects") is False
+
+    @patch("wpa.api.requests.request")
+    def test_put_disables_redirects(self, mock_request, client):
+        resp = MagicMock()
+        resp.ok = True
+        resp.status_code = 200
+        resp.url = "https://example.com/wp-json/wp/v2/posts/1"
+        resp.content = b'{}'
+        resp.json.return_value = {}
+        mock_request.return_value = resp
+
+        client._request(
+            "PUT",
+            "https://example.com/wp-json/wp/v2/posts/1",
+            json_data={"title": "Updated"},
+        )
+        kwargs = mock_request.call_args.kwargs
+        assert kwargs.get("allow_redirects") is False
+
+    @patch("wpa.api.requests.request")
+    def test_patch_disables_redirects(self, mock_request, client):
+        resp = MagicMock()
+        resp.ok = True
+        resp.status_code = 200
+        resp.url = "https://example.com/wp-json/wp/v2/posts/1"
+        resp.content = b'{}'
+        resp.json.return_value = {}
+        mock_request.return_value = resp
+
+        client._request(
+            "PATCH",
+            "https://example.com/wp-json/wp/v2/posts/1",
+            json_data={"title": "Updated"},
+        )
         kwargs = mock_request.call_args.kwargs
         assert kwargs.get("allow_redirects") is False
 
@@ -650,3 +704,55 @@ class TestSecurityHardening:
 
         # Does not raise.
         c.get("posts/1")
+
+    @patch("wpa.api.requests.get")
+    def test_get_list_refuses_scheme_downgrade_on_second_page(self, mock_get, client):
+        resp1 = MagicMock()
+        resp1.ok = True
+        resp1.status_code = 200
+        resp1.url = "https://example.com/wp-json/wp/v2/posts"
+        resp1.content = b'[{"id": 1}]'
+        resp1.json.return_value = [{"id": 1}]
+        resp1.headers = {"X-WP-TotalPages": "2"}
+
+        resp2 = MagicMock()
+        resp2.ok = True
+        resp2.status_code = 200
+        resp2.url = "http://example.com/wp-json/wp/v2/posts"
+        resp2.content = b'[{"id": 2}]'
+        resp2.json.return_value = [{"id": 2}]
+        resp2.headers = {"X-WP-TotalPages": "2"}
+
+        mock_get.side_effect = [resp1, resp2]
+
+        with pytest.raises(WPApiError) as exc_info:
+            list(client.get_list("posts"))
+        assert exc_info.value.code == "tls_downgrade"
+
+    @patch("wpa.api.requests.get")
+    def test_get_list_response_size_over_cap_on_second_page_raises(
+        self, mock_get, client
+    ):
+        from wpa.api import MAX_RESPONSE_BYTES
+
+        resp1 = MagicMock()
+        resp1.ok = True
+        resp1.status_code = 200
+        resp1.url = "https://example.com/wp-json/wp/v2/posts"
+        resp1.content = b'[{"id": 1}]'
+        resp1.json.return_value = [{"id": 1}]
+        resp1.headers = {"X-WP-TotalPages": "2"}
+
+        resp2 = MagicMock()
+        resp2.ok = True
+        resp2.status_code = 200
+        resp2.url = "https://example.com/wp-json/wp/v2/posts"
+        resp2.content = b"x" * (MAX_RESPONSE_BYTES + 1)
+        resp2.json.return_value = [{"id": 2}]
+        resp2.headers = {"X-WP-TotalPages": "2"}
+
+        mock_get.side_effect = [resp1, resp2]
+
+        with pytest.raises(WPApiError) as exc_info:
+            list(client.get_list("posts"))
+        assert exc_info.value.code == "response_too_large"

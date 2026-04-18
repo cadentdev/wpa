@@ -108,6 +108,12 @@ class TestListUsers:
         params = mock_client.get_list.call_args[1]["params"]
         assert params["context"] == "edit"
 
+    def test_list_users_sends_per_page_100(self, mock_client):
+        mock_client.get_list.return_value = iter([])
+        list_users(mock_client)
+        params = mock_client.get_list.call_args[1]["params"]
+        assert params["per_page"] == 100
+
     def test_list_users_with_role_filter(self, mock_client):
         mock_client.get_list.return_value = iter([MOCK_USER_LIST[1]])
         list_users(mock_client, role="editor")
@@ -203,6 +209,12 @@ class TestUpdateUser:
         data = mock_client.post.call_args[1]["data"]
         assert data["roles"] == ["author"]
 
+    def test_update_user_display_name_maps_to_name(self, mock_client):
+        mock_client.post.return_value = MOCK_USER_LIST[0]
+        update_user(mock_client, user_id=1, display_name="New Display")
+        data = mock_client.post.call_args[1]["data"]
+        assert data == {"name": "New Display"}
+
     def test_update_user_404(self, mock_client):
         mock_client.post.side_effect = WPApiError(
             404, "rest_user_invalid_id", "Invalid user ID."
@@ -265,6 +277,14 @@ class TestUserIdValidation:
     def test_string_rejected(self):
         with pytest.raises(ValueError, match="Invalid user ID"):
             _validate_user_id("1")
+
+    def test_bool_rejected(self):
+        with pytest.raises(ValueError, match="Invalid user ID"):
+            _validate_user_id(True)
+
+    def test_false_rejected(self):
+        with pytest.raises(ValueError, match="Invalid user ID"):
+            _validate_user_id(False)
 
     def test_path_injection_rejected(self):
         with pytest.raises(ValueError, match="Invalid user ID"):

@@ -7,6 +7,8 @@ import pytest
 from wpa.media import (
     AVAILABLE_FIELDS,
     DEFAULT_FIELDS,
+    _extract_media_row,
+    _validate_media_id,
     delete_media,
     get_media,
     import_media,
@@ -35,6 +37,21 @@ SAMPLE_API_MEDIA = {
     "author": 1,
     "link": "https://example.com/test-image/",
 }
+
+
+class TestExtractMediaRow:
+    def test_extracts_rendered_fields(self):
+        row = _extract_media_row(SAMPLE_API_MEDIA)
+        assert row["title"] == "test-image"
+        assert row["caption"] == "<p>Test caption</p>"
+        assert row["description"] == "<p>Test description</p>"
+
+    def test_missing_rendered_fields_default_to_empty(self):
+        row = _extract_media_row({"id": 1})
+        assert row["title"] == ""
+        assert row["caption"] == ""
+        assert row["description"] == ""
+
 
 SAMPLE_API_MEDIA_2 = {
     "id": 102,
@@ -94,6 +111,7 @@ class TestListMedia:
         mock_client.get_list.return_value = iter([])
         list_media(mock_client, media_type="image")
         params = mock_client.get_list.call_args[1]["params"]
+        assert params["context"] == "edit"
         assert params["media_type"] == "image"
 
     def test_passes_mime_type_filter(self, mock_client):
@@ -263,6 +281,19 @@ class TestImportMedia:
         call_kwargs = mock_client.post.call_args[1]
         assert call_kwargs["data"] == {}
 
+    @patch("wpa.media.mimetypes.guess_type", return_value=(None, None))
+    @patch("builtins.open", mock_open(read_data=b"fake image data"))
+    @patch("os.path.exists", return_value=True)
+    @patch("os.path.isfile", return_value=True)
+    @patch("os.path.abspath", return_value="/tmp/test-image.unknown")
+    def test_import_mime_fallback_application_octet_stream(
+        self, mock_abs, mock_isfile, mock_exists, mock_mime, mock_client
+    ):
+        mock_client.post.return_value = {"id": 206}
+        import_media(mock_client, "/tmp/test-image.unknown")
+        files = mock_client.post.call_args[1]["files"]
+        assert files["file"][2] == "application/octet-stream"
+
 
 class TestDeleteMedia:
     def test_delete_to_trash(self, mock_client):
@@ -286,3 +317,17 @@ class TestDeleteMedia:
     def test_delete_invalid_id_negative(self, mock_client):
         with pytest.raises(ValueError, match="Invalid media ID"):
             delete_media(mock_client, -5)
+
+    def test_delete_invalid_id_string(self, mock_client):
+        with pytest.raises(ValueError, match="Invalid media ID"):
+            delete_media(mock_client, "abc")
+
+
+class TestMediaIdValidation:
+    def test_bool_rejected(self):
+        with pytest.raises(ValueError, match="Invalid media ID"):
+            _validate_media_id(True)
+
+    def test_false_rejected(self):
+        with pytest.raises(ValueError, match="Invalid media ID"):
+            _validate_media_id(False)

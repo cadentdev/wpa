@@ -1006,12 +1006,27 @@ class TestMain:
 
         mock_client = MagicMock()
         mock_client.site_url = "https://example.com"
-        mock_client.post.return_value = {"id": 99}
 
-        with patch("wpa.cli.WPApiClient.from_config", return_value=mock_client):
+        with (
+            patch("wpa.cli.WPApiClient.from_config", return_value=mock_client),
+            patch(
+                "wpa.cli.parse_page",
+                return_value=("Title", "test-slug", "draft", "<p>Body</p>"),
+            ) as mock_parse_page,
+            patch("wpa.cli.publish_page", return_value=0) as mock_publish_page,
+        ):
             result = main(["publish", "--site", "demo", str(valid_md_file)])
 
         assert result == 0
+        mock_parse_page.assert_called_once_with(str(valid_md_file))
+        mock_publish_page.assert_called_once_with(
+            mock_client,
+            "Title",
+            "test-slug",
+            "draft",
+            "<p>Body</p>",
+            admin_path=mock_client.admin_path,
+        )
 
     def test_page_create_subcommand(self, single_site, valid_md_file, monkeypatch):
         """main page create runs the same pipeline as publish."""
@@ -1022,12 +1037,27 @@ class TestMain:
 
         mock_client = MagicMock()
         mock_client.site_url = "https://example.com"
-        mock_client.post.return_value = {"id": 99}
 
-        with patch("wpa.cli.WPApiClient.from_config", return_value=mock_client):
+        with (
+            patch("wpa.cli.WPApiClient.from_config", return_value=mock_client),
+            patch(
+                "wpa.cli.parse_page",
+                return_value=("Title", "test-slug", "draft", "<p>Body</p>"),
+            ) as mock_parse_page,
+            patch("wpa.cli.publish_page", return_value=0) as mock_publish_page,
+        ):
             result = main(["page", "create", "--site", "demo", str(valid_md_file)])
 
         assert result == 0
+        mock_parse_page.assert_called_once_with(str(valid_md_file))
+        mock_publish_page.assert_called_once_with(
+            mock_client,
+            "Title",
+            "test-slug",
+            "draft",
+            "<p>Body</p>",
+            admin_path=mock_client.admin_path,
+        )
 
     def test_site_add_subcommand(self, xdg_config, monkeypatch, capsys):
         """main site add runs interactive creation and returns 0."""
@@ -1096,3 +1126,15 @@ class TestParseMarkdown:
         assert slug == data["slug"]
         assert status == data["status"]
         assert content == data["content"]
+
+    def test_pending_status_accepted(self, tmp_path):
+        md = tmp_path / "pending.md"
+        md.write_text("---\ntitle: Pending\nstatus: pending\n---\nBody\n")
+        data = parse_markdown(str(md))
+        assert data["status"] == "pending"
+
+    def test_private_status_accepted(self, tmp_path):
+        md = tmp_path / "private.md"
+        md.write_text("---\ntitle: Private\nstatus: private\n---\nBody\n")
+        data = parse_markdown(str(md))
+        assert data["status"] == "private"
