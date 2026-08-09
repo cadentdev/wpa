@@ -5,7 +5,9 @@ from pathlib import Path
 from unittest.mock import MagicMock, patch
 
 import pytest
+
 import wpa.config as wpa_config
+from wpa.cli import main
 from wpa.config import (
     _load_env,
     create_site_config,
@@ -18,8 +20,6 @@ from wpa.config import (
 )
 from wpa.exceptions import WPApiError, WPConnectionError, WPTimeoutError
 from wpa.publish import parse_markdown, parse_page, publish_page
-from wpa.cli import main
-
 
 # ---------------------------------------------------------------------------
 # Fixtures
@@ -138,7 +138,7 @@ class TestParsePage:
 
     def test_defaults_slug_empty_and_status_draft(self, minimal_md_file):
         """parse_page defaults slug to '' and status to 'draft'."""
-        title, slug, status, html = parse_page(str(minimal_md_file))
+        title, slug, status, _html = parse_page(str(minimal_md_file))
         assert title == "Minimal Page"
         assert slug == ""
         assert status == "draft"
@@ -525,7 +525,7 @@ class TestResolveConfig:
         monkeypatch.delenv("WP_APP_PASSWORD", raising=False)
         monkeypatch.delenv("WP_ADMIN_PATH", raising=False)
 
-        site_url, user, password, admin_path = resolve_config()
+        site_url, _user, _password, _admin_path = resolve_config()
         assert site_url == "https://demo.example.com"
         output = capsys.readouterr().out
         assert "Using site: demo" in output
@@ -571,7 +571,7 @@ class TestResolveConfig:
         monkeypatch.delenv("WP_APP_PASSWORD", raising=False)
         monkeypatch.delenv("WP_ADMIN_PATH", raising=False)
 
-        site_url, user, password, admin_path = resolve_config()
+        site_url, _user, _password, _admin_path = resolve_config()
         assert site_url == "https://example.com"
 
     def test_zero_configs_migration_path(self, xdg_config, tmp_path, monkeypatch):
@@ -595,7 +595,7 @@ class TestResolveConfig:
         monkeypatch.delenv("WP_APP_PASSWORD", raising=False)
         monkeypatch.delenv("WP_ADMIN_PATH", raising=False)
 
-        site_url, user, password, admin_path = resolve_config()
+        site_url, user, _password, _admin_path = resolve_config()
         assert site_url == "https://migrated.example.com"
         assert user == "migrateuser"
 
@@ -871,7 +871,7 @@ class TestLoadEnvPrivateHttp:
         monkeypatch.delenv("WP_APP_PASSWORD", raising=False)
         monkeypatch.delenv("WP_ADMIN_PATH", raising=False)
 
-        site_url, user, password, admin_path = _load_env(env)
+        site_url, _user, _password, _admin_path = _load_env(env)
         assert site_url == "http://192.168.52.25"
 
     def test_http_private_ip_prints_warning(self, xdg_config, monkeypatch, capsys):

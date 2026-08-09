@@ -7,13 +7,12 @@ import json
 import pytest
 
 from wpa.formatter import (
+    VALID_FORMATS,
     format_count,
     format_field,
     format_ids,
     format_output,
-    VALID_FORMATS,
 )
-
 
 # --- Sample data ---
 
