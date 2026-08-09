@@ -12,6 +12,7 @@ from wpa.user import (
     _validate_user_id,
     create_user,
     delete_user,
+    generate_password,
     get_user,
     list_users,
     set_role,
@@ -333,3 +334,29 @@ class TestSetRole:
         )
         with pytest.raises(WPApiError):
             set_role(mock_client, 999, "subscriber")
+
+
+# --- generate_password ---
+
+
+class TestGeneratePassword:
+    def test_default_length(self):
+        assert len(generate_password()) == 24
+
+    def test_custom_length(self):
+        assert len(generate_password(32)) == 32
+
+    def test_contains_all_character_classes(self):
+        # Wordfence-strength policy: lower, upper, digit, symbol
+        pw = generate_password()
+        assert any(c.islower() for c in pw)
+        assert any(c.isupper() for c in pw)
+        assert any(c.isdigit() for c in pw)
+        assert any(not c.isalnum() for c in pw)
+
+    def test_passwords_are_unique(self):
+        assert generate_password() != generate_password()
+
+    def test_rejects_short_length(self):
+        with pytest.raises(ValueError, match="at least 12"):
+            generate_password(8)

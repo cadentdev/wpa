@@ -5,7 +5,7 @@ from unittest.mock import MagicMock, patch
 import pytest
 import requests
 
-from wpa.api import WPApiClient
+from wpa.api import WPApiClient, build_endpoint
 from wpa.exceptions import WPApiError, WPConnectionError, WPTimeoutError
 
 
@@ -234,7 +234,7 @@ class TestGet:
         result = client.get("posts/42")
         assert result == {"id": 42}
         mock_request.assert_called_once()
-        args, kwargs = mock_request.call_args
+        args, _kwargs = mock_request.call_args
         assert args == ("GET", "https://example.com/wp-json/wp/v2/posts/42")
 
     @patch("wpa.api.requests.request")
@@ -650,3 +650,181 @@ class TestSecurityHardening:
 
         # Does not raise.
         c.get("posts/1")
+
+
+class TestBuildEndpoint:
+    """build_endpoint() — shared sanitizer for dynamic endpoint paths."""
+
+    def test_joins_base_and_id(self):
+        assert build_endpoint("posts", 42) == "posts/42"
+
+    def test_single_segment(self):
+        assert build_endpoint("users") == "users"
+
+    def test_accepts_slug_segments(self):
+        assert build_endpoint("genre", 7) == "genre/7"
+        assert build_endpoint("users", 5, "application-passwords") == (
+            "users/5/application-passwords"
+        )
+
+    def test_accepts_numeric_string(self):
+        assert build_endpoint("posts", "42") == "posts/42"
+
+    def test_rejects_no_segments(self):
+        with pytest.raises(ValueError, match="at least one segment"):
+            build_endpoint()
+
+    @pytest.mark.parametrize(
+        "segment",
+        [
+            "..",
+            "42/../users",
+            "a/b",
+            "/posts",
+            "posts/",
+            "%2e%2e",
+            "posts?x=1",
+            "-leading-dash",
+            "_leading_underscore",
+            "",
+            "with space",
+            "crlf\r\n",
+        ],
+    )
+    def test_rejects_bad_string_segments(self, segment):
+        with pytest.raises(ValueError, match="Invalid endpoint segment"):
+            build_endpoint("posts", segment)
+
+    @pytest.mark.parametrize("segment", [0, -1, True, False, None, 4.2, ["posts"]])
+    def test_rejects_bad_types(self, segment):
+        with pytest.raises(ValueError, match="Invalid endpoint segment"):
+            build_endpoint("posts", segment)
+
+
+class TestWafDetection:
+    """HTML error pages from REST endpoints are flagged as possible WAF blocks."""
+
+    def _html_response(self, status_code, body="<!DOCTYPE html><html>Blocked</html>"):
+        resp = MagicMock()
+        resp.ok = False
+        resp.status_code = status_code
+        resp.json.side_effect = ValueError("not json")
+        resp.text = body
+        return resp
+
+    @pytest.mark.parametrize("status", [403, 404, 406, 429, 503])
+    def test_html_error_page_flagged(self, client, status):
+        with pytest.raises(WPApiError) as exc_info:
+            client._handle_response(self._html_response(status))
+        assert exc_info.value.code == "possible_waf_block"
+        assert exc_info.value.status_code == status
+
+    def test_html_tag_without_doctype_flagged(self, client):
+        resp = self._html_response(404, "<html><body>Not Found</body></html>")
+        with pytest.raises(WPApiError) as exc_info:
+            client._handle_response(resp)
+        assert exc_info.value.code == "possible_waf_block"
+
+    def test_leading_whitespace_still_flagged(self, client):
+        resp = self._html_response(403, "\n  <!doctype html><html></html>")
+        with pytest.raises(WPApiError) as exc_info:
+            client._handle_response(resp)
+        assert exc_info.value.code == "possible_waf_block"
+
+    def test_non_html_body_not_flagged(self, client):
+        resp = self._html_response(404, "plain text error")
+        with pytest.raises(WPApiError) as exc_info:
+            client._handle_response(resp)
+        assert exc_info.value.code == "unknown"
+
+    def test_html_on_other_status_not_flagged(self, client):
+        # 502 from a reverse proxy is a gateway problem, not a WAF block
+        resp = self._html_response(502)
+        with pytest.raises(WPApiError) as exc_info:
+            client._handle_response(resp)
+        assert exc_info.value.code == "unknown"
+
+    def test_json_error_unaffected(self, client):
+        resp = MagicMock()
+        resp.ok = False
+        resp.status_code = 404
+        resp.json.return_value = {"code": "rest_no_route", "message": "No route"}
+        with pytest.raises(WPApiError) as exc_info:
+            client._handle_response(resp)
+        assert exc_info.value.code == "rest_no_route"
+
+
+class TestRequestPasswordReset:
+    """request_password_reset() — core lost-password flow for --send-email."""
+
+    def _redirect_response(self, status_code=302, location=None):
+        resp = MagicMock()
+        resp.status_code = status_code
+        resp.headers = {"Location": location} if location is not None else {}
+        resp.url = "https://example.com/wp-login.php?action=lostpassword"
+        resp.content = b""
+        return resp
+
+    @patch("wpa.api.requests.post")
+    def test_success_on_checkemail_redirect(self, mock_post, client):
+        mock_post.return_value = self._redirect_response(
+            302, "https://example.com/wp-login.php?checkemail=confirm"
+        )
+        assert client.request_password_reset("newuser") is True
+
+    @patch("wpa.api.requests.post")
+    def test_posts_form_to_lostpassword(self, mock_post, client):
+        mock_post.return_value = self._redirect_response(
+            302, "https://example.com/wp-login.php?checkemail=confirm"
+        )
+        client.request_password_reset("newuser")
+        args, kwargs = mock_post.call_args
+        assert args == ("https://example.com/wp-login.php",)
+        assert kwargs["params"] == {"action": "lostpassword"}
+        assert kwargs["data"] == {"user_login": "newuser"}
+        assert kwargs["allow_redirects"] is False
+        # The lost-password form is public — credentials must never be sent
+        assert "auth" not in kwargs
+        assert "headers" not in kwargs
+
+    @patch("wpa.api.requests.post")
+    def test_failure_on_200_error_form(self, mock_post, client):
+        resp = self._redirect_response(200)
+        resp.text = "<html>Error: invalid username</html>"
+        mock_post.return_value = resp
+        assert client.request_password_reset("newuser") is False
+
+    @patch("wpa.api.requests.post")
+    def test_failure_on_redirect_without_confirm(self, mock_post, client):
+        mock_post.return_value = self._redirect_response(
+            302,
+            "https://example.com/wp-login.php?action=lostpassword&error=invalidcombo",
+        )
+        assert client.request_password_reset("ghost") is False
+
+    @patch("wpa.api.requests.post")
+    def test_failure_on_waf_403(self, mock_post, client):
+        mock_post.return_value = self._redirect_response(403)
+        assert client.request_password_reset("newuser") is False
+
+    @patch("wpa.api.requests.post")
+    def test_connection_error(self, mock_post, client):
+        mock_post.side_effect = requests.ConnectionError("refused")
+        with pytest.raises(WPConnectionError):
+            client.request_password_reset("newuser")
+
+    @patch("wpa.api.requests.post")
+    def test_timeout(self, mock_post, client):
+        mock_post.side_effect = requests.Timeout("timed out")
+        with pytest.raises(WPTimeoutError):
+            client.request_password_reset("newuser")
+
+    @patch("wpa.api.requests.post")
+    def test_refuses_tls_downgrade(self, mock_post, client):
+        resp = self._redirect_response(
+            302, "http://example.com/wp-login.php?checkemail=confirm"
+        )
+        resp.url = "http://example.com/wp-login.php"
+        mock_post.return_value = resp
+        with pytest.raises(WPApiError, match="tls_downgrade|http"):
+            client.request_password_reset("newuser")

@@ -1,5 +1,6 @@
 """Comment CRUD and moderation operations via WordPress REST API."""
 
+from wpa.api import build_endpoint
 from wpa.post import _extract_rendered
 
 # Maps friendly field names to WordPress REST API response keys
@@ -156,7 +157,9 @@ def get_comment(client, comment_id):
         Comment dict with friendly field names.
     """
     _validate_comment_id(comment_id)
-    data = client.get(f"comments/{comment_id}", params={"context": "edit"})
+    data = client.get(
+        build_endpoint("comments", comment_id), params={"context": "edit"}
+    )
     return _extract_comment_row(data)
 
 
@@ -228,7 +231,7 @@ def update_comment(client, comment_id, **fields):
             "--content, --status, --author-name, --author-email"
         )
 
-    return client.post(f"comments/{comment_id}", data=fields)
+    return client.post(build_endpoint("comments", comment_id), data=fields)
 
 
 def delete_comment(client, comment_id, force=False):
@@ -248,31 +251,35 @@ def delete_comment(client, comment_id, force=False):
     if force:
         params["force"] = True
 
-    return client.delete(f"comments/{comment_id}", params=params or None)
+    return client.delete(build_endpoint("comments", comment_id), params=params or None)
 
 
 def approve_comment(client, comment_id):
     """Approve a comment (set status to 'approved')."""
     _validate_comment_id(comment_id)
-    return client.post(f"comments/{comment_id}", data={"status": "approved"})
+    return client.post(
+        build_endpoint("comments", comment_id), data={"status": "approved"}
+    )
 
 
 def unapprove_comment(client, comment_id):
     """Unapprove a comment (set status to 'hold')."""
     _validate_comment_id(comment_id)
-    return client.post(f"comments/{comment_id}", data={"status": "hold"})
+    return client.post(build_endpoint("comments", comment_id), data={"status": "hold"})
 
 
 def spam_comment(client, comment_id):
     """Mark a comment as spam."""
     _validate_comment_id(comment_id)
-    return client.post(f"comments/{comment_id}", data={"status": "spam"})
+    return client.post(build_endpoint("comments", comment_id), data={"status": "spam"})
 
 
 def unspam_comment(client, comment_id):
     """Restore a spammed comment to 'approved'."""
     _validate_comment_id(comment_id)
-    return client.post(f"comments/{comment_id}", data={"status": "approved"})
+    return client.post(
+        build_endpoint("comments", comment_id), data={"status": "approved"}
+    )
 
 
 def trash_comment(client, comment_id):

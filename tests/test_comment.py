@@ -4,7 +4,6 @@ from unittest.mock import MagicMock
 
 import pytest
 
-from wpa.exceptions import WPApiError
 from wpa.comment import (
     AVAILABLE_FIELDS,
     DEFAULT_FIELDS,
@@ -21,6 +20,7 @@ from wpa.comment import (
     update_comment,
     validate_fields,
 )
+from wpa.exceptions import WPApiError
 
 
 @pytest.fixture

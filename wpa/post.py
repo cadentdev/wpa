@@ -1,5 +1,7 @@
 """Post CRUD operations via WordPress REST API."""
 
+from wpa.api import build_endpoint
+
 # Maps friendly field names to WordPress REST API response keys
 POST_FIELDS = {
     "id": "id",
@@ -157,7 +159,7 @@ def get_post(client, post_id, embed=False):
     params = {"context": "edit"}
     if embed:
         params["_embed"] = True
-    data = client.get(f"posts/{post_id}", params=params)
+    data = client.get(build_endpoint("posts", post_id), params=params)
     return _extract_post_row(data)
 
 
@@ -229,7 +231,7 @@ def update_post(client, post_id, **fields):
             "--title, --content, --status, --slug, --author"
         )
 
-    return client.post(f"posts/{post_id}", data=fields)
+    return client.post(build_endpoint("posts", post_id), data=fields)
 
 
 def delete_post(client, post_id, force=False):
@@ -249,4 +251,4 @@ def delete_post(client, post_id, force=False):
     if force:
         params["force"] = True
 
-    return client.delete(f"posts/{post_id}", params=params or None)
+    return client.delete(build_endpoint("posts", post_id), params=params or None)

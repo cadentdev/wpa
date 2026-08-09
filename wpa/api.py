@@ -28,6 +28,51 @@ _ENDPOINT_ALLOWED = re.compile(r"^[A-Za-z0-9][A-Za-z0-9_\-/]*$")
 _ENDPOINT_FORBIDDEN = ("..", "//", "\\", "\r", "\n", "%2f", "%2F", "%5c", "%5C")
 
 
+# A single path segment: an ASCII slug or numeric ID, no slashes, and a
+# leading alphanumeric (matches the first-character rule in _ENDPOINT_ALLOWED).
+_SEGMENT_ALLOWED = re.compile(r"^[A-Za-z0-9][A-Za-z0-9_-]*$")
+
+
+def build_endpoint(*segments):
+    """Join path segments into a validated REST endpoint string.
+
+    Shared helper for modules that build dynamic endpoints like
+    ``posts/{id}``. Each segment is validated individually before joining,
+    so an ID or slug sourced from user input can never smuggle a slash,
+    traversal sequence, or encoded separator into the path.
+
+    Args:
+        segments: One or more path segments. Strings must match
+            [A-Za-z0-9][A-Za-z0-9_-]*; integers must be positive.
+
+    Returns:
+        The joined endpoint string (e.g. 'posts/42').
+
+    Raises:
+        ValueError: If no segments are given or any segment is invalid.
+    """
+    if not segments:
+        raise ValueError("build_endpoint requires at least one segment")
+
+    parts = []
+    for segment in segments:
+        # ValueError (not TypeError) on wrong types too: callers catch
+        # ValueError as the single "bad input" signal, same as the ID
+        # validators in each module.
+        if isinstance(segment, int) and not isinstance(segment, bool):
+            if segment < 1:
+                raise ValueError(f"Invalid endpoint segment: {segment!r}")
+            segment = str(segment)
+        if not isinstance(segment, str) or not _SEGMENT_ALLOWED.match(segment):
+            raise ValueError(f"Invalid endpoint segment: {segment!r}")
+        parts.append(segment)
+
+    endpoint = "/".join(parts)
+    # Last gate — same guard every endpoint passes through in _url().
+    _validate_endpoint(endpoint)
+    return endpoint
+
+
 def _validate_endpoint(endpoint):
     """Reject endpoint strings that could escape the /wp-json/wp/v2/ prefix.
 
@@ -49,6 +94,20 @@ def _validate_endpoint(endpoint):
         raise ValueError(
             f"Endpoint {endpoint!r} contains characters outside [A-Za-z0-9_-/]"
         )
+
+
+# Status codes WAFs and security plugins typically answer with when they
+# reject a request outright (Wordfence uses 403 for blocked methods and 404
+# for author-enumeration protection).
+_WAF_STATUS_CODES = frozenset({403, 404, 406, 429, 503})
+
+
+def _looks_like_html(body):
+    """True if a response body starts like an HTML document."""
+    if not isinstance(body, str):
+        return False
+    head = body.lstrip()[:15].lower()
+    return head.startswith(("<!doctype", "<html"))
 
 
 class WPApiClient:
@@ -198,7 +257,20 @@ class WPApiClient:
                 error.get("message", default_message),
             )
         except ValueError:
-            # Non-JSON error response
+            # Non-JSON error response. An HTML error page from a REST
+            # endpoint is the signature of a WAF / security plugin (e.g.
+            # Wordfence) rejecting the request before WordPress sees it —
+            # WordPress itself always returns JSON errors from /wp-json/.
+            if response.status_code in _WAF_STATUS_CODES and _looks_like_html(
+                response.text
+            ):
+                raise WPApiError(
+                    response.status_code,
+                    "possible_waf_block",
+                    f"Server returned an HTML page (HTTP "
+                    f"{response.status_code}) instead of a REST API JSON "
+                    f"response.",
+                )
             body = response.text[:200].replace("\n", " ").replace("\r", "")
             raise WPApiError(
                 response.status_code,
@@ -343,8 +415,7 @@ class WPApiClient:
             total_pages = int(response.headers.get("X-WP-TotalPages", 1))
         except (TypeError, ValueError):
             total_pages = 1
-        if total_pages > MAX_TOTAL_PAGES:
-            total_pages = MAX_TOTAL_PAGES
+        total_pages = min(total_pages, MAX_TOTAL_PAGES)
 
         for page_num in range(2, total_pages + 1):
             page_params = {**params, "page": page_num}
@@ -389,6 +460,66 @@ class WPApiClient:
             Parsed JSON response dict.
         """
         return self._request("POST", self._url(endpoint), json_data=data, files=files)
+
+    def request_password_reset(self, user_login):
+        """Ask WordPress core to email a one-time set-password link.
+
+        POSTs the site's lost-password form (wp-login.php?action=lostpassword)
+        — the same flow as the "Lost your password?" link. This is the only
+        way to trigger a new-user email without server access: the REST
+        users endpoint never sends notifications.
+
+        The request is deliberately unauthenticated (the form is public) so
+        credentials are never sent to wp-login.php.
+
+        Args:
+            user_login: Username or email address of the target user.
+
+        Returns:
+            True if WordPress confirmed the request (redirect to
+            checkemail=confirm), False otherwise. Note this confirms the
+            request was accepted, not that the email was delivered.
+
+        Raises:
+            WPConnectionError: On connection failure.
+            WPTimeoutError: On timeout.
+        """
+        url = f"{self.site_url}/wp-login.php"
+        params = {"action": "lostpassword"}
+
+        self._debug_log("POST", url, params=params, data={"user_login": user_login})
+
+        try:
+            response = requests.post(
+                url,
+                params=params,
+                data={"user_login": user_login},
+                timeout=self.timeout,
+                allow_redirects=False,
+            )
+        except requests.ConnectionError:
+            raise WPConnectionError(
+                f"Could not connect to {self.site_url}. "
+                "Check the URL and your network connection."
+            )
+        except requests.Timeout:
+            raise WPTimeoutError(
+                f"Request to {self.site_url} timed out after {self.timeout} seconds."
+            )
+        except requests.RequestException as e:
+            raise WPConnectionError(f"Request failed: {e}")
+
+        self._debug_log("POST", url, response=response)
+
+        self._check_no_scheme_downgrade(response)
+
+        # Success is a redirect back to the login page with
+        # checkemail=confirm; anything else (200 with an error form, a WAF
+        # block page, a rate-limit rejection) means no email is coming.
+        location = response.headers.get("Location", "")
+        return (
+            response.status_code in (301, 302, 303) and "checkemail=confirm" in location
+        )
 
     def delete(self, endpoint, params=None):
         """DELETE a resource.

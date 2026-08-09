@@ -1,5 +1,43 @@
 """User CRUD operations via WordPress REST API."""
 
+import secrets
+import string
+
+from wpa.api import build_endpoint
+
+# Character classes for generated passwords. The symbol set is limited to
+# characters that survive shells and the strictest password policies.
+_PASSWORD_SYMBOLS = "!@#$%^*-_+="
+_PASSWORD_ALPHABET = string.ascii_letters + string.digits + _PASSWORD_SYMBOLS
+
+
+def generate_password(length=24):
+    """Generate a strong random password for a new user.
+
+    Guarantees at least one lowercase, uppercase, digit, and symbol so the
+    result passes strict policies (e.g. Wordfence requires all four classes
+    and 12+ characters).
+
+    Args:
+        length: Password length (default 24, minimum 12).
+
+    Returns:
+        The generated password string.
+    """
+    if length < 12:
+        raise ValueError("Generated passwords must be at least 12 characters.")
+
+    while True:
+        candidate = "".join(secrets.choice(_PASSWORD_ALPHABET) for _ in range(length))
+        if (
+            any(c.islower() for c in candidate)
+            and any(c.isupper() for c in candidate)
+            and any(c.isdigit() for c in candidate)
+            and any(c in _PASSWORD_SYMBOLS for c in candidate)
+        ):
+            return candidate
+
+
 # Maps friendly field names to WordPress REST API response keys
 USER_FIELDS = {
     "id": "id",
@@ -76,7 +114,7 @@ def get_user(client, user_id):
     """
     _validate_user_id(user_id)
     params = {"context": "edit"}
-    data = client.get(f"users/{user_id}", params=params)
+    data = client.get(build_endpoint("users", user_id), params=params)
     return _extract_user_row(data)
 
 
@@ -92,7 +130,7 @@ def set_role(client, user_id, role):
         Updated user dict from API response.
     """
     _validate_user_id(user_id)
-    return client.post(f"users/{user_id}", data={"roles": [role]})
+    return client.post(build_endpoint("users", user_id), data={"roles": [role]})
 
 
 def list_users(client, role=None, search=None):
@@ -199,7 +237,7 @@ def update_user(
             "--email, --role, --first-name, --last-name, --display-name"
         )
 
-    return client.post(f"users/{user_id}", data=payload)
+    return client.post(build_endpoint("users", user_id), data=payload)
 
 
 def delete_user(client, user_id, reassign=None):
@@ -222,4 +260,4 @@ def delete_user(client, user_id, reassign=None):
     if reassign is not None:
         params["reassign"] = reassign
 
-    return client.delete(f"users/{user_id}", params=params)
+    return client.delete(build_endpoint("users", user_id), params=params)

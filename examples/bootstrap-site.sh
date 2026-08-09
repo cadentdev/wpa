@@ -207,11 +207,11 @@ USER_EMAIL="${PREFIX}-author@example.test"
 USER_PASSWORD="ChangeMe-${PREFIX}-$(date +%s)"
 
 echo "Creating user ${USER_USERNAME}..."
-USER_CREATE_OUT=$(wpa user create \
+USER_CREATE_OUT=$(printf '%s\n' "${USER_PASSWORD}" | wpa user create \
     --site "${SITE}" \
     --username "${USER_USERNAME}" \
     --email "${USER_EMAIL}" \
-    --password "${USER_PASSWORD}" \
+    --password-stdin \
     --role subscriber)
 echo "$USER_CREATE_OUT"
 

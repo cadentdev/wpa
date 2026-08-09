@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "wpa"
-version = "0.8.0"
+version = "0.8.1"
 description = "WordPress Automation — manage posts, pages, and users via the REST API"
 readme = "README.md"
 license = "MIT"
@@ -27,7 +27,10 @@ classifiers = [
 ]
 dependencies = [
     "requests",
-    "python-frontmatter",
+    # frontmatter 1.2.0+ imports typing.TypeGuard (3.10+) without declaring
+    # requires-python, so pip on 3.9 installs a version that crashes on import
+    "python-frontmatter<1.2; python_version < '3.10'",
+    "python-frontmatter; python_version >= '3.10'",
     "markdown",
     "python-dotenv",
 ]

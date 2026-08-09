@@ -107,8 +107,18 @@ wpa user list --site mysite --search "jane"
 # Get a single user
 wpa user get 42 --site mysite
 
-# Create a user
-wpa user create --site mysite --username jdoe --email jdoe@example.com --role author
+# Create a user and email them a one-time set-password link.
+# A strong random password is generated (never displayed) when no
+# password flag is given — the recommended flow.
+wpa user create --site mysite --username jdoe --email jdoe@example.com \
+  --role author --send-email
+
+# Create a user with an explicit password read from stdin
+printf '%s\n' "$USER_PASSWORD" | wpa user create --site mysite \
+  --username jdoe --email jdoe@example.com --role author --password-stdin
+
+# Note: without --send-email, NO notification email is sent — the
+# WordPress REST API cannot send one. wpa prints a reminder either way.
 
 # Update a user
 wpa user update 42 --site mysite --email newemail@example.com --role editor

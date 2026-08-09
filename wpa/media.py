@@ -3,6 +3,8 @@
 import mimetypes
 import os
 
+from wpa.api import build_endpoint
+
 # Maps friendly field names to WordPress REST API response keys
 MEDIA_FIELDS = {
     "id": "id",
@@ -142,7 +144,7 @@ def get_media(client, media_id):
     """
     _validate_media_id(media_id)
     params = {"context": "edit"}
-    data = client.get(f"media/{media_id}", params=params)
+    data = client.get(build_endpoint("media", media_id), params=params)
     return _extract_media_row(data)
 
 
@@ -219,4 +221,4 @@ def delete_media(client, media_id, force=False):
     if force:
         params["force"] = True
 
-    return client.delete(f"media/{media_id}", params=params or None)
+    return client.delete(build_endpoint("media", media_id), params=params or None)
