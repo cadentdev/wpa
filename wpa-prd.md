@@ -4,7 +4,7 @@
 **Version:** PRD v1.2
 **Date:** 2026-04-14
 **Author:** Neil Johnson, Cadent Creative
-**Current release:** v0.7.0
+**Current release:** v0.8.1
 **Repository:** [github.com/cadentdev/wpa](https://github.com/cadentdev/wpa)
 **PyPI:** [pypi.org/project/wpa](https://pypi.org/project/wpa/)
 **License:** MIT

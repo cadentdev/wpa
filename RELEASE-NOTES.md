@@ -1,5 +1,86 @@
 # Release Notes
 
+## v0.8.1 — User Notifications + WAF Detection (2026-08-08)
+
+Bug-fix and hardening release addressing the v0.8.0 security-audit follow-ups
+and the `user create` silent-failure near-miss from
+[#45](https://github.com/cadentdev/wpa/issues/45).
+
+### `wpa user create` overhaul (#45, #36)
+
+The headline problem: `wpa user create` created the account and **emailed
+nobody** — the REST users endpoint never sends the new-user notification, and
+nothing in the output said so. Six accounts created for a client review would
+have been six accounts nobody could log into.
+
+- **`--send-email` (new)** — after creating the user, WPA triggers WordPress
+  core's lost-password flow (`wp-login.php?action=lostpassword`), which emails
+  a genuine one-time set-password link. No plugin needed, and the operator
+  never handles the credential. WPA verifies WordPress *accepted* the request
+  (redirect to `checkemail=confirm`) and exits non-zero with a loud warning if
+  it didn't (e.g. blocked or rate-limited by a security plugin). Caveat: the
+  subject line reads "Password Reset", and a send is not a delivery — confirm
+  against the recipient or the site's mail log for anything important.
+- **Generated passwords by default** — when no password flag is given, WPA
+  generates a strong random 24-character password (guaranteed upper/lower/
+  digit/symbol, satisfying Wordfence's policy) and never displays it. The
+  operator handling a credential over chat or email was the anti-pattern;
+  the blessed flow is now generate + `--send-email`.
+- **The silence is loud** — every create without `--send-email` prints a note
+  to stderr that **no notification email was sent** and the new user has not
+  been told the account exists.
+- **BREAKING: `--password` removed** (deprecated in v0.8.0, M1 sunset per
+  #36). It leaked via `ps(1)`, shell history, and CI logs. The interactive
+  prompt is gone too. Use `--password-stdin`
+  (`printf '%s\n' "$PW" | wpa user create ... --password-stdin`) or omit for
+  a generated password. `examples/bootstrap-site.sh` migrated accordingly.
+
+### WAF block detection (#40, first slice of #25)
+
+Wordfence and similar WAFs reject some REST requests (DELETE methods, the
+`?author=` query param) before WordPress sees them, answering with an HTML
+error page that WPA previously dumped raw ("Message: `<!DOCTYPE html>...`").
+
+- `api._handle_response` now recognizes the signature — HTML body plus HTTP
+  403/404/406/429/503 from a REST endpoint — and raises a structured
+  `possible_waf_block` error.
+- The CLI maps it to a plain-language explanation naming the likely cause and
+  known triggers, pointing at the new **`docs/waf-compatibility.md`** symptom
+  matrix.
+- WPA deliberately ships no WAF *bypasses* — fixes are site-admin
+  configuration changes; the constraint discussion lives in #40/#25. The
+  client-side `--author` fallback remains open in #25.
+
+### Friendlier `tls_downgrade` error (#38)
+
+The v0.8.0 MITM guard (refusing https→http downgrades) kept its teeth but
+lost its terseness: the CLI now explains what happened, the likely causes
+(canonical-host redirect, misconfigured LB/CDN, MITM), and what to check,
+with a new **TLS troubleshooting** section in GETTING-STARTED.md.
+
+### Shared endpoint sanitizer (#39)
+
+New `api.build_endpoint(*segments)` validates each path segment individually
+(slug or positive int, no slashes) before joining, then re-runs the v0.8.0
+`_validate_endpoint` gate on the result. All six resource modules (`post`,
+`page`, `user`, `comment`, `media`, `term`) now use it for every dynamic
+path (`posts/{id}`, `{taxonomy}/{id}`, …) instead of raw f-strings. No
+behavior change on the happy path.
+
+### Housekeeping
+
+- Fixed 22 lint findings surfaced by ruff 0.16 (CI installs latest ruff, so
+  these were about to fail every PR): import sorting, unused unpacked
+  variables in tests, and two literally-identical `if`/`else` branches in
+  `cli.py`.
+
+### Quality
+
+- **Tests:** 488 total, +51 from v0.8.0 (`build_endpoint`, WAF detection,
+  `request_password_reset`, `generate_password`, CLI error formatting in the
+  new `tests/test_cli.py`).
+- `ruff check` / `ruff format --check` clean on ruff 0.16.2.
+
 ## v0.8.0 — Comments + Taxonomy Terms (2026-04-15)
 
 ### What's New
