@@ -7,7 +7,11 @@ import sys
 from wpa import __version__
 from wpa.api import WPApiClient
 from wpa.comment import (
+    COUNT_STATUSES as COMMENT_COUNT_STATUSES,
+)
+from wpa.comment import (
     approve_comment,
+    count_comments,
     create_comment,
     delete_comment,
     get_comment,
@@ -53,7 +57,7 @@ from wpa.post import (
 from wpa.post import (
     validate_fields as validate_post_fields,
 )
-from wpa.publish import parse_page, publish_page
+from wpa.publish import parse_markdown, parse_page, publish_page, resolve_file_fields
 from wpa.term import (
     create_term,
     delete_term,
@@ -236,6 +240,13 @@ def _do_post_get(args):  # pragma: no cover
 def _do_post_create(args):  # pragma: no cover
     """Create a new WordPress post."""
     try:
+        if args.file and args.content:
+            print("Error: --file and --content are mutually exclusive.")
+            return 1
+        if not args.file and not args.title:
+            print("Error: Provide --title, or --file with a markdown file.")
+            return 1
+
         client = WPApiClient.from_config(site_name=args.site, debug=args.debug)
 
         # Parse categories and tags from comma-separated strings
@@ -247,12 +258,25 @@ def _do_post_create(args):  # pragma: no cover
         if args.tags:
             tags = [int(t.strip()) for t in args.tags.split(",")]
 
+        if args.file:
+            # Markdown file: frontmatter supplies title/status/slug and the
+            # body converts to HTML; explicit CLI flags win over frontmatter.
+            data = parse_markdown(args.file)
+            title, content, status, slug = resolve_file_fields(
+                data, title=args.title, status=args.status, slug=args.slug
+            )
+        else:
+            title = args.title
+            content = args.content or ""
+            status = args.status or "draft"
+            slug = args.slug
+
         result = create_post(
             client,
-            title=args.title,
-            content=args.content or "",
-            status=args.status,
-            slug=args.slug,
+            title=title,
+            content=content,
+            status=status,
+            slug=slug,
             author=args.author,
             categories=categories,
             tags=tags,
@@ -360,25 +384,44 @@ def _do_page_get(args):  # pragma: no cover
 
 
 def _do_page_create_dispatch(args):  # pragma: no cover
-    """Dispatch page create — markdown file or CLI flags."""
-    if args.file:
-        return _do_publish(args)
-    if not args.title:
+    """Dispatch page create — markdown file (positional or --file) or flags."""
+    if args.file and args.file_opt:
+        print("Error: pass the markdown file once (positional or --file).")
+        return 1
+    file_path = args.file or args.file_opt
+    if file_path and args.content:
+        print("Error: --file and --content are mutually exclusive.")
+        return 1
+    if not file_path and not args.title:
         print("Error: Provide a markdown file or --title to create a page.")
         return 1
-    return _do_page_create(args)
+    return _do_page_create(args, file_path=file_path)
 
 
-def _do_page_create(args):  # pragma: no cover
-    """Create a new WordPress page from CLI flags."""
+def _do_page_create(args, file_path=None):  # pragma: no cover
+    """Create a new WordPress page from a markdown file and/or CLI flags."""
     try:
         client = WPApiClient.from_config(site_name=args.site, debug=args.debug)
+
+        if file_path:
+            # Frontmatter supplies title/status/slug and the body converts
+            # to HTML; explicit CLI flags win over frontmatter.
+            data = parse_markdown(file_path)
+            title, content, status, slug = resolve_file_fields(
+                data, title=args.title, status=args.status, slug=args.slug
+            )
+        else:
+            title = args.title
+            content = args.content or ""
+            status = args.status or "draft"
+            slug = args.slug
+
         result = create_page(
             client,
-            title=args.title,
-            content=args.content or "",
-            status=args.status,
-            slug=args.slug,
+            title=title,
+            content=content,
+            status=status,
+            slug=slug,
             parent=args.parent,
             author=args.author,
             menu_order=args.menu_order,
@@ -867,6 +910,31 @@ def _do_comment_trash(args):  # pragma: no cover
         return _handle_api_error(e)
 
 
+def _do_comment_count(args):  # pragma: no cover
+    """Count comments per moderation status."""
+    try:
+        client = WPApiClient.from_config(site_name=args.site, debug=args.debug)
+        counts = count_comments(client, status=args.status)
+
+        if args.status:
+            print(counts[args.status])
+            return 0
+
+        if args.format == "json":
+            print(json.dumps(counts))
+            return 0
+
+        width = max(len(s) for s in counts) + 1
+        for s, n in counts.items():
+            print(f"{s + ':':<{width}} {n}")
+        return 0
+    except ValueError as e:
+        print(f"Error: {e}")
+        return 1
+    except (WPApiError, WPConnectionError, WPTimeoutError) as e:
+        return _handle_api_error(e)
+
+
 # --- Term handlers ---
 
 
@@ -1084,11 +1152,21 @@ def main(argv=None):
     post_create_parser = post_subparsers.add_parser(
         "create", parents=[shared], help="Create a new post"
     )
-    post_create_parser.add_argument("--title", required=True, help="Post title")
+    post_create_parser.add_argument(
+        "--title", help="Post title (required unless --file supplies one)"
+    )
     post_create_parser.add_argument("--content", help="Post content (HTML)")
     post_create_parser.add_argument(
+        "--file",
+        help=(
+            "Markdown file with YAML frontmatter; the body is converted to "
+            "HTML. CLI flags override frontmatter. Mutually exclusive with "
+            "--content."
+        ),
+    )
+    post_create_parser.add_argument(
         "--status",
-        default="draft",
+        default=None,
         help="Post status (default: draft)",
     )
     post_create_parser.add_argument("--slug", help="URL slug")
@@ -1168,10 +1246,19 @@ def main(argv=None):
         default=None,
         help="Path to markdown file with YAML frontmatter",
     )
+    page_create_parser.add_argument(
+        "--file",
+        dest="file_opt",
+        help=(
+            "Markdown file with YAML frontmatter (same as the positional "
+            "argument). CLI flags override frontmatter. Mutually exclusive "
+            "with --content."
+        ),
+    )
     page_create_parser.add_argument("--title", help="Page title")
     page_create_parser.add_argument("--content", help="Page content (HTML)")
     page_create_parser.add_argument(
-        "--status", default="draft", help="Page status (default: draft)"
+        "--status", default=None, help="Page status (default: draft)"
     )
     page_create_parser.add_argument("--slug", help="URL slug")
     page_create_parser.add_argument("--parent", type=int, help="Parent page ID")
@@ -1467,6 +1554,23 @@ def main(argv=None):
         "--force", action="store_true", help="Permanently delete (skip trash)"
     )
     comment_delete_parser.set_defaults(func=_do_comment_delete)
+
+    # wpa comment count
+    comment_count_parser = comment_subparsers.add_parser(
+        "count", parents=[shared], help="Count comments per moderation status"
+    )
+    comment_count_parser.add_argument(
+        "--status",
+        choices=list(COMMENT_COUNT_STATUSES),
+        help="Count a single status (bare number output)",
+    )
+    comment_count_parser.add_argument(
+        "--format",
+        default="table",
+        choices=["table", "json"],
+        help="Output format (default: table)",
+    )
+    comment_count_parser.set_defaults(func=_do_comment_count)
 
     # Comment moderation subcommands
     for action_name, action_func, help_text in (

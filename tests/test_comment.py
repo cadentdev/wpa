@@ -9,6 +9,7 @@ from wpa.comment import (
     DEFAULT_FIELDS,
     _extract_comment_row,
     approve_comment,
+    count_comments,
     create_comment,
     delete_comment,
     get_comment,
@@ -337,3 +338,40 @@ class TestModerationActions:
     def test_spam_invalid_id(self, mock_client):
         with pytest.raises(ValueError, match="Invalid comment ID"):
             spam_comment(mock_client, -1)
+
+
+# --- count_comments ---
+
+
+class TestCountComments:
+    def test_counts_all_statuses(self, mock_client):
+        mock_client.get_total.side_effect = [1423, 7, 89, 12]
+        counts = count_comments(mock_client)
+        assert counts == {"approved": 1423, "hold": 7, "spam": 89, "trash": 12}
+        assert mock_client.get_total.call_count == 4
+
+    def test_normalizes_approved_to_approve(self, mock_client):
+        # Same REST API asymmetry as list_comments — query param is 'approve'
+        mock_client.get_total.return_value = 5
+        count_comments(mock_client, status="approved")
+        params = mock_client.get_total.call_args[1]["params"]
+        assert params["status"] == "approve"
+        assert params["context"] == "edit"
+
+    def test_single_status(self, mock_client):
+        mock_client.get_total.return_value = 7
+        counts = count_comments(mock_client, status="hold")
+        assert counts == {"hold": 7}
+        mock_client.get_total.assert_called_once()
+        params = mock_client.get_total.call_args[1]["params"]
+        assert params["status"] == "hold"
+
+    def test_unknown_status_raises(self, mock_client):
+        with pytest.raises(ValueError, match="Unknown status 'bogus'"):
+            count_comments(mock_client, status="bogus")
+        mock_client.get_total.assert_not_called()
+
+    def test_preserves_display_order(self, mock_client):
+        mock_client.get_total.side_effect = [1, 2, 3, 4]
+        counts = count_comments(mock_client)
+        assert list(counts) == ["approved", "hold", "spam", "trash"]

@@ -74,6 +74,31 @@ def parse_page(filepath):
     return data["title"], data["slug"], data["status"], data["content"]
 
 
+def resolve_file_fields(file_data, title=None, status=None, slug=None):
+    """Merge markdown-file fields with CLI flag overrides.
+
+    Used by `post create --file` / `page create --file`: the file's YAML
+    frontmatter supplies title/status/slug and the converted HTML body,
+    and any CLI flag that was explicitly passed wins over frontmatter.
+
+    Args:
+        file_data: Dict from parse_markdown() (title, slug, status, content).
+        title: CLI --title override, or None.
+        status: CLI --status override, or None.
+        slug: CLI --slug override, or None.
+
+    Returns:
+        Tuple of (title, content, status, slug) with overrides applied.
+        status falls back to 'draft', slug to None when empty.
+    """
+    return (
+        title or file_data.get("title"),
+        file_data.get("content", ""),
+        status or file_data.get("status") or "draft",
+        slug or file_data.get("slug") or None,
+    )
+
+
 def publish_page(client, title, slug, status, content, admin_path="wp-admin"):
     """POST a page to WordPress REST API using WPApiClient.
 

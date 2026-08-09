@@ -828,3 +828,66 @@ class TestRequestPasswordReset:
         mock_post.return_value = resp
         with pytest.raises(WPApiError, match="tls_downgrade|http"):
             client.request_password_reset("newuser")
+
+
+class TestGetTotal:
+    """get_total() — X-WP-Total via a single-item fetch."""
+
+    def _response(self, total="1423", items=None):
+        resp = MagicMock()
+        resp.ok = True
+        resp.status_code = 200
+        resp.headers = {"X-WP-Total": total} if total is not None else {}
+        resp.content = b"[{}]"
+        resp.json.return_value = items if items is not None else [{}]
+        resp.url = "https://example.com/wp-json/wp/v2/comments"
+        return resp
+
+    @patch("wpa.api.requests.get")
+    def test_returns_header_total(self, mock_get, client):
+        mock_get.return_value = self._response("1423")
+        assert client.get_total("comments") == 1423
+
+    @patch("wpa.api.requests.get")
+    def test_fetches_single_item(self, mock_get, client):
+        mock_get.return_value = self._response()
+        client.get_total("comments", params={"status": "hold"})
+        _, kwargs = mock_get.call_args
+        assert kwargs["params"]["per_page"] == 1
+        assert kwargs["params"]["status"] == "hold"
+
+    @patch("wpa.api.requests.get")
+    def test_does_not_mutate_caller_params(self, mock_get, client):
+        mock_get.return_value = self._response()
+        params = {"status": "hold"}
+        client.get_total("comments", params=params)
+        assert params == {"status": "hold"}
+
+    @patch("wpa.api.requests.get")
+    def test_missing_header_falls_back_to_body_length(self, mock_get, client):
+        mock_get.return_value = self._response(total=None, items=[{}, {}])
+        assert client.get_total("comments") == 2
+
+    @patch("wpa.api.requests.get")
+    def test_malformed_header_falls_back(self, mock_get, client):
+        mock_get.return_value = self._response(total="lots")
+        assert client.get_total("comments") == 1
+
+    @patch("wpa.api.requests.get")
+    def test_error_response_raises(self, mock_get, client):
+        resp = MagicMock()
+        resp.ok = False
+        resp.status_code = 403
+        resp.headers = {}
+        resp.content = b'{"code": "rest_forbidden"}'
+        resp.json.return_value = {"code": "rest_forbidden", "message": "No."}
+        resp.url = "https://example.com/wp-json/wp/v2/comments"
+        mock_get.return_value = resp
+        with pytest.raises(WPApiError):
+            client.get_total("comments")
+
+    @patch("wpa.api.requests.get")
+    def test_connection_error(self, mock_get, client):
+        mock_get.side_effect = requests.ConnectionError("refused")
+        with pytest.raises(WPConnectionError):
+            client.get_total("comments")

@@ -356,6 +356,55 @@ class WPApiClient:
         """
         return self._request("GET", self._url(endpoint), params=params)
 
+    def get_total(self, endpoint, params=None):
+        """Return the total number of items in a collection.
+
+        Fetches a single item (per_page=1) and reads the X-WP-Total header,
+        so counting a large collection costs one lightweight request instead
+        of paginating through everything.
+
+        Args:
+            endpoint: API path (e.g., 'comments').
+            params: Optional query parameters (filters).
+
+        Returns:
+            Total item count as an int.
+        """
+        params = {**(params or {}), "per_page": 1}
+        url = self._url(endpoint)
+
+        self._debug_log("GET", url, params=params)
+
+        try:
+            response = requests.get(
+                url, headers=self._headers(), params=params, timeout=self.timeout
+            )
+        except requests.ConnectionError:
+            raise WPConnectionError(
+                f"Could not connect to {self.site_url}. "
+                "Check the URL and your network connection."
+            )
+        except requests.Timeout:
+            raise WPTimeoutError(
+                f"Request to {self.site_url} timed out after {self.timeout} seconds."
+            )
+        except requests.RequestException as e:
+            raise WPConnectionError(f"Request failed: {e}")
+
+        self._debug_log("GET", url, response=response)
+
+        self._check_no_scheme_downgrade(response)
+        self._check_response_size(response)
+
+        # Raises on error responses; the body itself is discarded.
+        data = self._handle_response(response)
+
+        try:
+            return int(response.headers.get("X-WP-Total"))
+        except (TypeError, ValueError):
+            # Header missing or malformed — fall back to what we can see.
+            return len(data) if isinstance(data, list) else 0
+
     def get_list(self, endpoint, params=None):
         """GET a paginated list of resources.
 

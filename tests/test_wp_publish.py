@@ -19,7 +19,12 @@ from wpa.config import (
     validate_site_name,
 )
 from wpa.exceptions import WPApiError, WPConnectionError, WPTimeoutError
-from wpa.publish import parse_markdown, parse_page, publish_page
+from wpa.publish import (
+    parse_markdown,
+    parse_page,
+    publish_page,
+    resolve_file_fields,
+)
 
 # ---------------------------------------------------------------------------
 # Fixtures
@@ -1096,3 +1101,42 @@ class TestParseMarkdown:
         assert slug == data["slug"]
         assert status == data["status"]
         assert content == data["content"]
+
+
+# --- resolve_file_fields (post/page create --file) ---
+
+
+class TestResolveFileFields:
+    @staticmethod
+    def _file_data():
+        return {
+            "title": "From File",
+            "slug": "from-file",
+            "status": "publish",
+            "content": "<p>Body</p>",
+        }
+
+    def test_frontmatter_only(self):
+        title, content, status, slug = resolve_file_fields(self._file_data())
+        assert title == "From File"
+        assert content == "<p>Body</p>"
+        assert status == "publish"
+        assert slug == "from-file"
+
+    def test_cli_flags_override_frontmatter(self):
+        title, content, status, slug = resolve_file_fields(
+            self._file_data(), title="CLI Title", status="draft", slug="cli-slug"
+        )
+        assert title == "CLI Title"
+        assert status == "draft"
+        assert slug == "cli-slug"
+        # content always comes from the file
+        assert content == "<p>Body</p>"
+
+    def test_defaults_when_frontmatter_sparse(self):
+        title, _content, status, slug = resolve_file_fields(
+            {"title": "Minimal", "slug": "", "status": "", "content": "<p>x</p>"}
+        )
+        assert title == "Minimal"
+        assert status == "draft"
+        assert slug is None
