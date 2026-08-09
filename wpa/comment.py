@@ -146,6 +146,43 @@ def list_comments(
     return [_extract_comment_row(c) for c in client.get_list("comments", params=params)]
 
 
+# Statuses reported by `wpa comment count`, in display order.
+COUNT_STATUSES = ("approved", "hold", "spam", "trash")
+
+
+def count_comments(client, status=None):
+    """Count comments per moderation status.
+
+    One lightweight request per status (X-WP-Total header via per_page=1),
+    so checking the moderation queue never paginates through comment bodies.
+
+    Args:
+        client: WPApiClient instance.
+        status: Single status to count, or None for all of COUNT_STATUSES.
+
+    Returns:
+        Ordered dict of {status: count}.
+
+    Raises:
+        ValueError: If status is not a known comment status.
+    """
+    if status is not None and status not in COUNT_STATUSES:
+        raise ValueError(
+            f"Unknown status '{status}'. "
+            f"Available statuses: {', '.join(COUNT_STATUSES)}"
+        )
+
+    statuses = (status,) if status else COUNT_STATUSES
+    counts = {}
+    for s in statuses:
+        # Same REST API asymmetry as list_comments: query with 'approve'.
+        query_status = "approve" if s == "approved" else s
+        counts[s] = client.get_total(
+            "comments", params={"context": "edit", "status": query_status}
+        )
+    return counts
+
+
 def get_comment(client, comment_id):
     """Get a single comment by ID.
 

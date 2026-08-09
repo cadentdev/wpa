@@ -54,6 +54,10 @@ wpa post get 42 --site mysite
 # Create a post
 wpa post create --site mysite --title "My Post" --content "<p>Hello</p>" --status draft
 
+# Create a post from a markdown file (YAML frontmatter supplies
+# title/status/slug; CLI flags override frontmatter)
+wpa post create --site mysite --file article.md --author 15 --categories 3,7
+
 # Update a post
 wpa post update 42 --site mysite --title "Updated Title" --status publish
 
@@ -72,8 +76,10 @@ wpa page list --site mysite --status publish --parent 10
 # Get a single page
 wpa page get 42 --site mysite
 
-# Create a page from markdown file
+# Create a page from a markdown file (positional or --file; CLI flags
+# like --parent/--author/--status override frontmatter)
 wpa page create --site mysite pages/about.md
+wpa page create --site mysite --file pages/about.md --parent 12
 
 # Create a page from flags
 wpa page create --site mysite --title "About" --content "<p>About us</p>"
@@ -162,6 +168,11 @@ wpa comment list --site mysite
 wpa comment list --site mysite --status hold
 wpa comment list --site mysite --post 42 --status approved
 wpa comment list --site mysite --author-email "reviewer@example.com"
+
+# Count comments per moderation status (one lightweight request each)
+wpa comment count --site mysite
+wpa comment count --site mysite --status hold      # bare number
+wpa comment count --site mysite --format json
 
 # Get a single comment
 wpa comment get 123 --site mysite
