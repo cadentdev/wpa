@@ -4,6 +4,9 @@
 
 Two quality-of-life features rolled up from the issue backlog.
 
+On PyPI as [wpa 0.8.2](https://pypi.org/project/wpa/0.8.2/) —
+`pip install --upgrade wpa`.
+
 ### `wpa comment count` (#34)
 
 Moderation-queue monitoring in one command instead of four:
@@ -47,11 +50,22 @@ delegating to the legacy publish path. `wpa publish` itself is unchanged.
   `resolve_file_fields`).
 - `ruff check` / `ruff format --check` clean.
 
+### Distribution
+
+Starting with this release, WPA publishes to PyPI automatically via GitHub
+Actions [trusted publishing](https://docs.pypi.org/trusted-publishers/)
+(OIDC — no API tokens stored anywhere). Publishing a GitHub Release triggers
+the build and upload; `.github/workflows/publish.yml` has the details.
+v0.8.1 and v0.8.2 are the first releases shipped through this pipeline.
+
 ## v0.8.1 — User Notifications + WAF Detection (2026-08-08)
 
 Bug-fix and hardening release addressing the v0.8.0 security-audit follow-ups
 and the `user create` silent-failure near-miss from
 [#45](https://github.com/cadentdev/wpa/issues/45).
+
+On PyPI as [wpa 0.8.1](https://pypi.org/project/wpa/0.8.1/) —
+`pip install --upgrade wpa`.
 
 ### `wpa user create` overhaul (#45, #36)
 
@@ -120,6 +134,13 @@ behavior change on the happy path.
   these were about to fail every PR): import sorting, unused unpacked
   variables in tests, and two literally-identical `if`/`else` branches in
   `cli.py`.
+- **Packaging fix:** capped `python-frontmatter<1.2` on Python 3.9.
+  frontmatter 1.2.0 imports `typing.TypeGuard` (a 3.10+ feature) without
+  declaring `requires-python`, so a fresh `pip install wpa` on 3.9 crashed on
+  import. Python 3.10+ installs are unaffected and keep getting the latest
+  frontmatter. (Both drift incidents fed
+  [#48](https://github.com/cadentdev/wpa/issues/48), the dependency-pinning
+  follow-up.)
 
 ### Quality
 
