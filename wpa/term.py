@@ -8,6 +8,8 @@ taxonomies under different paths than their slugs (`category` → `categories`,
 
 import re
 
+from wpa.api import build_endpoint
+
 # Map taxonomy slugs to their REST API endpoint base. Built-in taxonomies
 # are exposed under custom paths; custom taxonomies use their slug directly.
 _TAXONOMY_ENDPOINTS = {
@@ -165,7 +167,7 @@ def get_term(client, term_id, taxonomy=None):
     """
     _validate_term_id(term_id)
     endpoint = _resolve_endpoint(taxonomy)
-    data = client.get(f"{endpoint}/{term_id}", params=None)
+    data = client.get(build_endpoint(endpoint, term_id), params=None)
     return _extract_term_row(data)
 
 
@@ -233,7 +235,7 @@ def update_term(client, term_id, taxonomy=None, **fields):
         )
 
     endpoint = _resolve_endpoint(taxonomy)
-    return client.post(f"{endpoint}/{term_id}", data=fields)
+    return client.post(build_endpoint(endpoint, term_id), data=fields)
 
 
 def delete_term(client, term_id, taxonomy=None):
@@ -252,4 +254,4 @@ def delete_term(client, term_id, taxonomy=None):
     """
     _validate_term_id(term_id)
     endpoint = _resolve_endpoint(taxonomy)
-    return client.delete(f"{endpoint}/{term_id}", params={"force": True})
+    return client.delete(build_endpoint(endpoint, term_id), params={"force": True})

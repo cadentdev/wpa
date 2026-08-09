@@ -1,5 +1,6 @@
 """Page CRUD operations via WordPress REST API."""
 
+from wpa.api import build_endpoint
 from wpa.post import _extract_rendered
 
 # Maps friendly field names to WordPress REST API response keys
@@ -133,7 +134,7 @@ def get_page(client, page_id, embed=False):
     params = {"context": "edit"}
     if embed:
         params["_embed"] = True
-    data = client.get(f"pages/{page_id}", params=params)
+    data = client.get(build_endpoint("pages", page_id), params=params)
     return _extract_page_row(data)
 
 
@@ -201,7 +202,7 @@ def update_page(client, page_id, **fields):
             "--title, --content, --status, --slug, --parent"
         )
 
-    return client.post(f"pages/{page_id}", data=fields)
+    return client.post(build_endpoint("pages", page_id), data=fields)
 
 
 def delete_page(client, page_id, force=False):
@@ -221,4 +222,4 @@ def delete_page(client, page_id, force=False):
     if force:
         params["force"] = True
 
-    return client.delete(f"pages/{page_id}", params=params or None)
+    return client.delete(build_endpoint("pages", page_id), params=params or None)

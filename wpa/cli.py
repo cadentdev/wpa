@@ -1,39 +1,11 @@
 """Command-line interface for WPA — subcommand structure."""
 
 import argparse
-import getpass
 import json
 import sys
 
 from wpa import __version__
 from wpa.api import WPApiClient
-from wpa.config import create_site_config, list_sites
-from wpa.exceptions import WPApiError, WPConnectionError, WPTimeoutError
-from wpa.formatter import format_count, format_field, format_ids, format_output
-from wpa.post import (
-    create_post,
-    delete_post,
-    get_post,
-    list_posts,
-    update_post,
-    validate_fields as validate_post_fields,
-)
-from wpa.page import (
-    create_page,
-    delete_page,
-    get_page,
-    list_pages,
-    update_page,
-    validate_fields as validate_page_fields,
-)
-from wpa.publish import parse_page, publish_page
-from wpa.media import (
-    delete_media,
-    get_media,
-    import_media,
-    list_media,
-    validate_fields as validate_media_fields,
-)
 from wpa.comment import (
     approve_comment,
     create_comment,
@@ -45,38 +17,112 @@ from wpa.comment import (
     unapprove_comment,
     unspam_comment,
     update_comment,
+)
+from wpa.comment import (
     validate_fields as validate_comment_fields,
 )
+from wpa.config import create_site_config, list_sites
+from wpa.exceptions import WPApiError, WPConnectionError, WPTimeoutError
+from wpa.formatter import format_count, format_field, format_ids, format_output
+from wpa.media import (
+    delete_media,
+    get_media,
+    import_media,
+    list_media,
+)
+from wpa.media import (
+    validate_fields as validate_media_fields,
+)
+from wpa.page import (
+    create_page,
+    delete_page,
+    get_page,
+    list_pages,
+    update_page,
+)
+from wpa.page import (
+    validate_fields as validate_page_fields,
+)
+from wpa.post import (
+    create_post,
+    delete_post,
+    get_post,
+    list_posts,
+    update_post,
+)
+from wpa.post import (
+    validate_fields as validate_post_fields,
+)
+from wpa.publish import parse_page, publish_page
 from wpa.term import (
     create_term,
     delete_term,
     get_term,
     list_terms,
     update_term,
+)
+from wpa.term import (
     validate_fields as validate_term_fields,
 )
 from wpa.user import (
     DEFAULT_FIELDS as USER_DEFAULT_FIELDS,
+)
+from wpa.user import (
     create_user,
     delete_user,
+    generate_password,
     get_user,
     list_users,
     set_role,
     update_user,
+)
+from wpa.user import (
     validate_fields as validate_user_fields,
 )
 
 
+def _format_api_error(e):
+    """Build the user-facing message for an API exception.
+
+    Known machine codes get a multi-line explanation of what happened and
+    what to check; everything else falls back to the generic status/code/
+    message block.
+    """
+    if not isinstance(e, WPApiError):
+        return f"Error: {e}"
+
+    if e.code == "tls_downgrade":
+        return (
+            "Error: the connection was downgraded from https to http.\n"
+            "  WPA refused the response because your credentials would travel\n"
+            "  unencrypted. This is usually a misconfigured redirect on the\n"
+            "  server, load balancer, or CDN — or a man-in-the-middle.\n"
+            "  Check that WP_SITE_URL is the site's canonical https address\n"
+            "  (right host, with/without 'www') and that the server does not\n"
+            "  redirect API requests to http.\n"
+            "  See GETTING-STARTED.md, 'TLS troubleshooting'."
+        )
+
+    if e.code == "possible_waf_block":
+        return (
+            f"Error: the server returned an HTML page (HTTP {e.status_code}) "
+            "instead of a REST API JSON response.\n"
+            "  This usually means a security plugin or WAF (e.g. Wordfence)\n"
+            "  blocked the request before it reached WordPress. Known triggers:\n"
+            "  DELETE requests and the ?author= query parameter.\n"
+            "  See docs/waf-compatibility.md for symptoms and fixes."
+        )
+
+    return (
+        f"Error: WordPress API returned {e.status_code}\n"
+        f"  Code:    {e.code}\n"
+        f"  Message: {e.message}"
+    )
+
+
 def _handle_api_error(e):  # pragma: no cover
     """Print an API error and return exit code 1."""
-    if isinstance(e, WPApiError):
-        print(f"Error: WordPress API returned {e.status_code}")
-        print(f"  Code:    {e.code}")
-        print(f"  Message: {e.message}")
-    elif isinstance(e, WPConnectionError):
-        print(f"Error: {e}")
-    elif isinstance(e, WPTimeoutError):
-        print(f"Error: {e}")
+    print(_format_api_error(e))
     return 1
 
 
@@ -103,7 +149,7 @@ def _format_list_output(rows, fields, args):  # pragma: no cover
         return 0
 
     output = format_output(rows, fields, args.format)
-    print(output, end="" if args.format in ("csv", "tsv") else "")
+    print(output, end="")
     return 0
 
 
@@ -411,7 +457,7 @@ def _do_user_list(args):  # pragma: no cover
             return 0
 
         output = format_output(rows, fields, args.format)
-        print(output, end="" if args.format in ("csv", "tsv") else "")
+        print(output, end="")
         return 0
     except ValueError as e:
         print(f"Error: {e}")
@@ -425,25 +471,20 @@ def _do_user_create(args):  # pragma: no cover
     try:
         client = WPApiClient.from_config(site_name=args.site)
 
-        # Password acquisition order: --password-stdin > --password (deprecated)
-        # > interactive prompt. --password is still accepted for backward compat
-        # but emits a deprecation warning to stderr because it leaks via
-        # ps(1) / shell history / CI logs.
-        new_password = None
+        # Password acquisition: --password-stdin, else a generated strong
+        # random password that is never displayed or stored. The operator
+        # handling a credential is the anti-pattern here — the blessed flow
+        # is a generated password plus --send-email, so the new user sets
+        # their own password via a one-time link (mirroring wp-admin).
+        generated = False
         if getattr(args, "password_stdin", False):
             new_password = sys.stdin.readline().rstrip("\n")
-        elif args.password:
-            print(
-                "Warning: --password exposes the password via ps(1) and shell "
-                "history. Use --password-stdin or omit for interactive prompt.",
-                file=sys.stderr,
-            )
-            new_password = args.password
+            if not new_password:
+                print("Error: Password cannot be empty.")
+                return 1
         else:
-            new_password = getpass.getpass("Password for new user: ")
-        if not new_password:
-            print("Error: Password cannot be empty.")
-            return 1
+            new_password = generate_password()
+            generated = True
 
         result = create_user(
             client,
@@ -458,6 +499,37 @@ def _do_user_create(args):  # pragma: no cover
         print(f"  ID:       {result['id']}")
         print(f"  Username: {result.get('slug', args.username)}")
         print(f"  Email:    {result.get('email', args.email)}")
+        if generated:
+            print("  Password: (generated — not displayed)")
+
+        if getattr(args, "send_email", False):
+            sent = client.request_password_reset(args.username)
+            if sent:
+                print(
+                    f"Set-password email requested for '{args.username}'. "
+                    "WordPress accepted the request (the subject line reads "
+                    "'Password Reset'). A send is not a delivery — confirm "
+                    "with the recipient or the site's mail log."
+                )
+                return 0
+            print(
+                "Warning: WordPress did NOT confirm the set-password email "
+                f"for '{args.username}'. A security plugin may be blocking "
+                "or rate-limiting wp-login.php?action=lostpassword. The "
+                f"account exists (ID {result['id']}) but nobody has been "
+                "notified. Send the user a set-password link via the site's "
+                "'Lost your password?' page.",
+                file=sys.stderr,
+            )
+            return 1
+
+        print(
+            "Note: no notification email was sent — the WordPress REST API "
+            "cannot send one. The new user has not been told this account "
+            "exists. Use --send-email to send a one-time set-password link, "
+            "or point the user at the site's 'Lost your password?' page.",
+            file=sys.stderr,
+        )
         return 0
     except (WPApiError, WPConnectionError, WPTimeoutError) as e:
         return _handle_api_error(e)
@@ -1177,17 +1249,22 @@ def main(argv=None):
     user_create_parser.add_argument("--username", required=True, help="Login name")
     user_create_parser.add_argument("--email", required=True, help="Email address")
     user_create_parser.add_argument(
-        "--password",
-        default=None,
+        "--password-stdin",
+        action="store_true",
         help=(
-            "DEPRECATED: Password on the command line leaks via ps(1) and "
-            "shell history. Use --password-stdin or omit for interactive prompt."
+            "Read the password from stdin. If omitted, a strong random "
+            "password is generated and never displayed — pair with "
+            "--send-email so the user sets their own."
         ),
     )
     user_create_parser.add_argument(
-        "--password-stdin",
+        "--send-email",
         action="store_true",
-        help="Read password from stdin (safer than --password).",
+        help=(
+            "After creating the user, trigger WordPress core's lost-password "
+            "flow to email them a one-time set-password link. Without this "
+            "flag no email is sent — the REST API cannot send one."
+        ),
     )
     user_create_parser.add_argument("--role", help="User role (e.g., editor, author)")
     user_create_parser.add_argument("--first-name", help="First name")
