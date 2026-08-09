@@ -1,5 +1,52 @@
 # Release Notes
 
+## v0.8.2 — Quick Wins: Comment Counts + Markdown Input (2026-08-08)
+
+Two quality-of-life features rolled up from the issue backlog.
+
+### `wpa comment count` (#34)
+
+Moderation-queue monitoring in one command instead of four:
+
+```bash
+wpa comment count                      # approved/hold/spam/trash summary
+wpa comment count --status hold        # bare number for scripting
+wpa comment count --format json        # {"approved": 1423, "hold": 7, ...}
+```
+
+Implementation: one lightweight request per status, reading the `X-WP-Total`
+header from a `per_page=1` fetch via the new `WPApiClient.get_total()` —
+counting never paginates through comment bodies. The `approved`→`approve`
+REST-API status asymmetry from v0.8.0 is normalized here too.
+
+### `--file` markdown input for `post create` and `page create` (#27)
+
+Both commands now accept a markdown file with YAML frontmatter, reusing the
+same conversion pipeline as `wpa publish`:
+
+```bash
+wpa post create --file article.md --author 15 --categories 3,7
+wpa page create --file about.md --parent 12 --status draft
+```
+
+- Frontmatter supplies `title`, `status`, `slug`; the body converts to HTML.
+- Explicit CLI flags override frontmatter (`--status draft` beats
+  `status: publish` in the file).
+- `--file` and `--content` are mutually exclusive; `--title` is only
+  required when no file supplies one.
+
+**Behavior change:** `wpa page create <file.md>` (the positional form) now
+routes through the same path as `--file`, so metadata flags (`--author`,
+`--parent`, `--menu-order`, `--status`, `--slug`) finally apply when creating
+from a file. Previously the positional form silently ignored them by
+delegating to the legacy publish path. `wpa publish` itself is unchanged.
+
+### Quality
+
+- **Tests:** 503 total, +15 from v0.8.1 (`get_total`, `count_comments`,
+  `resolve_file_fields`).
+- `ruff check` / `ruff format --check` clean.
+
 ## v0.8.1 — User Notifications + WAF Detection (2026-08-08)
 
 Bug-fix and hardening release addressing the v0.8.0 security-audit follow-ups
