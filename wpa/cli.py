@@ -90,12 +90,26 @@ from wpa.post import (
 from wpa.post import (
     validate_fields as validate_post_fields,
 )
+from wpa.post_type import (
+    get_post_type,
+    list_post_types,
+)
+from wpa.post_type import (
+    validate_fields as validate_post_type_fields,
+)
 from wpa.publish import parse_markdown, publish_page, resolve_file_fields
 from wpa.sidebar import (
     list_sidebars,
 )
 from wpa.sidebar import (
     validate_fields as validate_sidebar_fields,
+)
+from wpa.taxonomy import (
+    get_taxonomy,
+    list_taxonomies,
+)
+from wpa.taxonomy import (
+    validate_fields as validate_taxonomy_fields,
 )
 from wpa.term import (
     create_term,
@@ -823,6 +837,70 @@ def _do_media_delete(args):  # pragma: no cover
 
 
 # --- Comment handlers ---
+
+
+def _do_taxonomy_list(args):  # pragma: no cover
+    """List registered taxonomies."""
+    try:
+        client = WPApiClient.from_config(site_name=args.site, debug=args.debug)
+        fields = validate_taxonomy_fields(args.fields)
+        rows = list_taxonomies(client)
+        return _format_list_output(rows, fields, args)
+    except ValueError as e:
+        print(f"Error: {e}")
+        return 1
+    except (WPApiError, WPConnectionError, WPTimeoutError) as e:
+        return _handle_api_error(e)
+
+
+def _do_taxonomy_get(args):  # pragma: no cover
+    """Get a single registered taxonomy."""
+    try:
+        client = WPApiClient.from_config(site_name=args.site, debug=args.debug)
+        row = get_taxonomy(client, args.taxonomy)
+        if args.format == "json":
+            print(json.dumps(row, indent=2, ensure_ascii=False))
+        else:
+            for key, value in row.items():
+                print(f"{key}: {value}")
+        return 0
+    except ValueError as e:
+        print(f"Error: {e}")
+        return 1
+    except (WPApiError, WPConnectionError, WPTimeoutError) as e:
+        return _handle_api_error(e)
+
+
+def _do_post_type_list(args):  # pragma: no cover
+    """List registered post types."""
+    try:
+        client = WPApiClient.from_config(site_name=args.site, debug=args.debug)
+        fields = validate_post_type_fields(args.fields)
+        rows = list_post_types(client)
+        return _format_list_output(rows, fields, args)
+    except ValueError as e:
+        print(f"Error: {e}")
+        return 1
+    except (WPApiError, WPConnectionError, WPTimeoutError) as e:
+        return _handle_api_error(e)
+
+
+def _do_post_type_get(args):  # pragma: no cover
+    """Get a single registered post type."""
+    try:
+        client = WPApiClient.from_config(site_name=args.site, debug=args.debug)
+        row = get_post_type(client, args.post_type)
+        if args.format == "json":
+            print(json.dumps(row, indent=2, ensure_ascii=False))
+        else:
+            for key, value in row.items():
+                print(f"{key}: {value}")
+        return 0
+    except ValueError as e:
+        print(f"Error: {e}")
+        return 1
+    except (WPApiError, WPConnectionError, WPTimeoutError) as e:
+        return _handle_api_error(e)
 
 
 def _do_plugin_list(args):  # pragma: no cover
@@ -1924,6 +2002,58 @@ def main(argv=None):
     )
     media_delete_parser.set_defaults(func=_do_media_delete)
 
+    # --- wpa taxonomy ---
+    taxonomy_parser = subparsers.add_parser(
+        "taxonomy",
+        help="Inspect registered taxonomies (read-only)",
+    )
+    taxonomy_subparsers = taxonomy_parser.add_subparsers(dest="taxonomy_command")
+
+    # wpa taxonomy list
+    taxonomy_list_parser = taxonomy_subparsers.add_parser(
+        "list", parents=[shared, list_p], help="List registered taxonomies"
+    )
+    taxonomy_list_parser.set_defaults(func=_do_taxonomy_list)
+
+    # wpa taxonomy get <slug>
+    taxonomy_get_parser = taxonomy_subparsers.add_parser(
+        "get", parents=[shared], help="Get a single registered taxonomy"
+    )
+    taxonomy_get_parser.add_argument("taxonomy", help="Taxonomy slug (e.g. category)")
+    taxonomy_get_parser.add_argument(
+        "--format",
+        default="table",
+        choices=["table", "json"],
+        help="Output format (default: table)",
+    )
+    taxonomy_get_parser.set_defaults(func=_do_taxonomy_get)
+
+    # --- wpa post-type ---
+    post_type_parser = subparsers.add_parser(
+        "post-type",
+        help="Inspect registered post types (read-only)",
+    )
+    post_type_subparsers = post_type_parser.add_subparsers(dest="post_type_command")
+
+    # wpa post-type list
+    post_type_list_parser = post_type_subparsers.add_parser(
+        "list", parents=[shared, list_p], help="List registered post types"
+    )
+    post_type_list_parser.set_defaults(func=_do_post_type_list)
+
+    # wpa post-type get <slug>
+    post_type_get_parser = post_type_subparsers.add_parser(
+        "get", parents=[shared], help="Get a single registered post type"
+    )
+    post_type_get_parser.add_argument("post_type", help="Post type slug (e.g. post)")
+    post_type_get_parser.add_argument(
+        "--format",
+        default="table",
+        choices=["table", "json"],
+        help="Output format (default: table)",
+    )
+    post_type_get_parser.set_defaults(func=_do_post_type_get)
+
     # --- wpa plugin ---
     plugin_parser = subparsers.add_parser(
         "plugin",
@@ -2473,6 +2603,18 @@ def main(argv=None):
         args, "tag_command", None
     ):  # pragma: no cover
         tag_parser.print_help()
+        return 1
+
+    if args.command == "taxonomy" and not getattr(
+        args, "taxonomy_command", None
+    ):  # pragma: no cover
+        taxonomy_parser.print_help()
+        return 1
+
+    if args.command == "post-type" and not getattr(
+        args, "post_type_command", None
+    ):  # pragma: no cover
+        post_type_parser.print_help()
         return 1
 
     return args.func(args)
