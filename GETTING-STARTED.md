@@ -4,7 +4,7 @@ This guide walks through setting up a WordPress site to work with WPA, from veri
 
 ## Prerequisites
 
-- Python 3.9+
+- Python 3.10+
 - A WordPress site (5.6+ for Application Passwords)
 - An Administrator account on the site
 

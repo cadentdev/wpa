@@ -28,7 +28,7 @@ ruff check .
 ruff format --check .
 ```
 
-CI runs on ubuntu/macos/windows across Python 3.9, 3.11, 3.12, 3.13. The required status check is `test (ubuntu-latest, 3.12)`.
+CI runs on ubuntu/macos/windows across Python 3.10, 3.11, 3.12, 3.13, plus a weekly scheduled run on `main` to catch dependency drift. The required status check is `test (ubuntu-latest, 3.12)`, which also runs the bandit/pip-audit security step.
 
 ## Architecture
 
@@ -54,13 +54,14 @@ CI runs on ubuntu/macos/windows across Python 3.9, 3.11, 3.12, 3.13. The require
 
 ## Key Conventions
 
-- Python 3.9 minimum — ruff targets `py39`
-- Version string lives in `wpa/__init__.py` AND `pyproject.toml` — bump both (see Release Workflow step 10; #48 will make this single-source)
+- Python 3.10 minimum — ruff targets `py310`
+- Version string lives in `wpa/__init__.py` only — `pyproject.toml` reads it via `dynamic = ["version"]`
+- Lint/audit tools (ruff, bandit, pip-audit) are pinned exactly in the `dev` extra; bump deliberately and fix new findings in the same PR. Runtime deps stay unpinned (upper-bound only known-broken releases)
 - Branch protection on `main` — use feature branches + PRs
 - Command names follow wp-cli conventions (see design principle 4.1 in the PRD)
 - Default status for content creation is always `draft`
 - HTTPS enforced for public addresses; HTTP allowed only for private/LAN
-- Security audits: `bandit` (static analysis) and `pip-audit` (dependency vulnerabilities)
+- Security audits: `bandit` (static analysis) and `pip-audit` (dependency vulnerabilities) run in CI on every PR
 
 ## Release Workflow
 
@@ -81,7 +82,7 @@ Every release follows this arc. Steps 1–3 are planning, 4–6 repeat per PR, 7
 8. **Regression** — full suite + lint + audit tools on the final merged state.
 9. **Docs** — update README, wpa-prd.md (Current release, §6.1 implemented commands, roadmap),
    CLAUDE.md (test count), then RELEASE-NOTES.md last, when scope is final.
-10. **Version bump** — `wpa/__init__.py` AND `pyproject.toml` (until #48 makes it single-source).
+10. **Version bump** — `wpa/__init__.py` (single source; `pyproject.toml` reads it dynamically).
 11. **Ship** — merge the release PR, tag the merge commit `vX.Y.Z`, create the GitHub Release
     (title `vX.Y.Z — Short Name`, body = that version's RELEASE-NOTES.md section). Trusted
     publishing pushes to PyPI automatically.
