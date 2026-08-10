@@ -1,5 +1,93 @@
 # Release Notes
 
+## v0.10.0 — Phase 6: Plugins, Menus, Widgets, Settings (2026-08-09)
+
+Five new command groups covering PRD Phase 6 — the site-structure tier of
+the REST API. All privilege checks stay server-side per WPA's design:
+these commands require `activate_plugins`, `edit_theme_options`, or
+`manage_options` capabilities (administrator, typically).
+
+On PyPI as [wpa 0.10.0](https://pypi.org/project/wpa/0.10.0/) —
+`pip install --upgrade wpa`.
+
+### `wpa plugin` (#41)
+
+```bash
+wpa plugin list --status active          # not paginated — WP returns all
+wpa plugin get akismet/akismet           # folder/file, .php suffix accepted
+wpa plugin activate wordfence/wordfence
+wpa plugin deactivate wordfence/wordfence
+```
+
+Identifiers are validated per segment (traversal-proof); the wp-cli
+`folder/file.php` convention is accepted and normalized. Install and
+delete are deliberately deferred (distinct error surfaces — #41's
+follow-ups); version updates are a REST API impossibility.
+
+### `wpa menu` (#61)
+
+Menus, items, and locations for classic themes:
+
+```bash
+wpa menu create --name "Primary"
+wpa menu item add 3 --title "Docs" --url https://example.com/docs
+wpa menu item add 3 --object page --object-id 12   # type inferred
+wpa menu item update 71 --position 1
+wpa menu location list                             # read-only
+```
+
+Item types are inferred (`custom` from `--url`; `post_type` or
+`taxonomy` from `--object`) with `--type` as the override. Menu and item
+deletes are force-only — the REST API cannot trash them — and the CLI
+says so. Location *assignment* is theme-dependent and not exposed.
+
+### `wpa widget` (#62)
+
+```bash
+wpa widget list --sidebar sidebar-1
+wpa widget get recent-posts-3            # includes instance settings
+wpa widget update recent-posts-3 --sidebar sidebar-2
+wpa widget update recent-posts-3 --instance-json '{"title": "Latest"}'
+wpa widget deactivate recent-posts-3     # inactive sidebar, settings kept
+wpa widget delete recent-posts-3 --force
+```
+
+Status is synthesized from the sidebar (the API has no status field).
+`widget add` is deliberately unsupported: every widget type has its own
+instance schema, so a generic create would be guesswork.
+
+### `wpa option` + `wpa sidebar` (#60)
+
+```bash
+wpa option list
+wpa option get posts_per_page            # bare value for scripting
+wpa option update posts_per_page 20     # JSON-typed: arrives as an integer
+wpa sidebar list
+```
+
+Honest boundaries: only options registered with `show_in_rest=true` are
+reachable (unlike `wp option`, which reads the whole `wp_options` table).
+Unknown names fail with that explanation and the list of available
+settings — checked *before* the write, not after WordPress's opaque 400.
+
+### Block themes
+
+All three theme-structure groups (menus, widgets, sidebars) are
+classic-theme constructs. Empty listings on block themes print an
+explanation instead of a bare "No results".
+
+### Quality
+
+- **Tests:** 626 total, +106 from v0.9.0 — every module written
+  test-first per the CLAUDE.md workflow.
+- The release-diff security audit found no injection surface (all
+  dynamic endpoints route through `build_endpoint`; `--instance-json`
+  is parsed, never evaluated) and one completeness gap, fixed in-release:
+  `widget get` now shows instance settings, without which
+  `update --instance-json` would have been blind.
+- ruff, bandit, and pip-audit clean; the bootstrap smoke script gained
+  an idempotent plugin round-trip section.
+
 ## v0.9.0 — Housekeeping: Python 3.10 Floor + Author Attribution (2026-08-09)
 
 A hardening and infrastructure release. The minor-version bump signals one

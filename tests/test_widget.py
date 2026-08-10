@@ -54,6 +54,10 @@ class TestValidateFields:
         for f in DEFAULT_FIELDS:
             assert f in AVAILABLE_FIELDS
 
+    def test_instance_available_but_not_default(self):
+        assert "instance" in AVAILABLE_FIELDS
+        assert "instance" not in DEFAULT_FIELDS
+
 
 class TestExtractWidgetRow:
     def test_status_synthesized_active(self):
@@ -96,6 +100,18 @@ class TestGetWidget:
         with pytest.raises(ValueError, match="widget"):
             get_widget(mock_client, "../evil")
         mock_client.get.assert_not_called()
+
+    def test_instance_settings_flattened(self, mock_client):
+        # Release-audit follow-up: update --instance-json is unusable if
+        # get cannot show the current instance settings.
+        mock_client.get.return_value = SAMPLE_API_WIDGET
+        row = get_widget(mock_client, "recent-posts-3")
+        assert row["instance"] == {"title": "Latest", "number": 5}
+
+    def test_instance_missing_defaults_empty(self, mock_client):
+        mock_client.get.return_value = {"id": "x-1", "sidebar": "sidebar-1"}
+        row = get_widget(mock_client, "x-1")
+        assert row["instance"] == ""
 
 
 class TestUpdateWidget:
