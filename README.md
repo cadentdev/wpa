@@ -224,6 +224,36 @@ wpa plugin deactivate akismet/akismet --site mysite
 
 Installing, updating, and deleting plugins are not supported yet — install/delete are planned (see issue #41's follow-ups); updating to a newer version is a REST API limitation, so use wp-admin or wp-cli for that.
 
+### Manage nav menus
+
+Classic nav menus (block themes have none). Requires `edit_theme_options` capability.
+
+```bash
+# Menus
+wpa menu list --site mysite
+wpa menu get 3 --site mysite
+wpa menu create --site mysite --name "Primary" --description "Main navigation"
+wpa menu delete 3 --site mysite    # always permanent; deletes its items too
+
+# Menu items — custom links need --title and --url
+wpa menu item list --site mysite --menu 3
+wpa menu item add 3 --site mysite --title "Docs" --url "https://example.com/docs"
+
+# Menu items — object links point at existing content
+wpa menu item add 3 --site mysite --object page --object-id 12
+wpa menu item add 3 --site mysite --object category --object-id 7
+wpa menu item add 3 --site mysite --title "Blog" --object page --object-id 8 --position 2
+
+# Reorder, re-parent, rename, remove
+wpa menu item update 71 --site mysite --position 1
+wpa menu item update 71 --site mysite --parent 70
+wpa menu item delete 71 --site mysite
+
+# Where can menus go? (read-only; assignment is theme-dependent and
+# not exposed by the REST API)
+wpa menu location list --site mysite
+```
+
 ### Manage site settings
 
 Requires an account with the `manage_options` capability (administrator).

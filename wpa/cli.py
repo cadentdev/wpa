@@ -37,6 +37,22 @@ from wpa.media import (
 from wpa.media import (
     validate_fields as validate_media_fields,
 )
+from wpa.menu import (
+    LOCATION_DEFAULT_FIELDS as MENU_LOCATION_FIELDS,
+)
+from wpa.menu import (
+    create_menu,
+    create_menu_item,
+    delete_menu,
+    delete_menu_item,
+    get_menu,
+    list_menu_items,
+    list_menu_locations,
+    list_menus,
+    update_menu_item,
+    validate_item_fields,
+    validate_menu_fields,
+)
 from wpa.option import (
     get_setting,
     list_settings,
@@ -858,6 +874,163 @@ def _do_plugin_activate(args):  # pragma: no cover
 
 def _do_plugin_deactivate(args):  # pragma: no cover
     return _do_plugin_toggle(deactivate_plugin, "deactivated")(args)
+
+
+def _do_menu_list(args):  # pragma: no cover
+    """List nav menus."""
+    try:
+        client = WPApiClient.from_config(site_name=args.site, debug=args.debug)
+        fields = validate_menu_fields(args.fields)
+        rows = list_menus(client, search=args.search)
+        if not rows and not (args.ids or args.count or args.field):
+            print(
+                "No menus found. Block themes have no classic nav menus; "
+                "this is expected on a block theme."
+            )
+            return 0
+        return _format_list_output(rows, fields, args)
+    except ValueError as e:
+        print(f"Error: {e}")
+        return 1
+    except (WPApiError, WPConnectionError, WPTimeoutError) as e:
+        return _handle_api_error(e)
+
+
+def _do_menu_get(args):  # pragma: no cover
+    """Get a single nav menu."""
+    try:
+        client = WPApiClient.from_config(site_name=args.site, debug=args.debug)
+        row = get_menu(client, args.id)
+        if args.format == "json":
+            print(json.dumps(row, indent=2, ensure_ascii=False))
+        else:
+            for key, value in row.items():
+                print(f"{key}: {value}")
+        return 0
+    except ValueError as e:
+        print(f"Error: {e}")
+        return 1
+    except (WPApiError, WPConnectionError, WPTimeoutError) as e:
+        return _handle_api_error(e)
+
+
+def _do_menu_create(args):  # pragma: no cover
+    """Create a nav menu."""
+    try:
+        client = WPApiClient.from_config(site_name=args.site, debug=args.debug)
+        result = create_menu(client, args.name, description=args.description)
+        print("Menu created successfully!")
+        print(f"  ID:   {result.get('id')}")
+        print(f"  Name: {result.get('name')}")
+        return 0
+    except ValueError as e:
+        print(f"Error: {e}")
+        return 1
+    except (WPApiError, WPConnectionError, WPTimeoutError) as e:
+        return _handle_api_error(e)
+
+
+def _do_menu_delete(args):  # pragma: no cover
+    """Delete a nav menu (always permanent; its items go with it)."""
+    try:
+        client = WPApiClient.from_config(site_name=args.site, debug=args.debug)
+        delete_menu(client, args.id)
+        print(f"Menu {args.id} deleted permanently (menus cannot be trashed).")
+        return 0
+    except ValueError as e:
+        print(f"Error: {e}")
+        return 1
+    except (WPApiError, WPConnectionError, WPTimeoutError) as e:
+        return _handle_api_error(e)
+
+
+def _do_menu_item_list(args):  # pragma: no cover
+    """List menu items."""
+    try:
+        client = WPApiClient.from_config(site_name=args.site, debug=args.debug)
+        fields = validate_item_fields(args.fields)
+        rows = list_menu_items(client, menu=args.menu)
+        return _format_list_output(rows, fields, args)
+    except ValueError as e:
+        print(f"Error: {e}")
+        return 1
+    except (WPApiError, WPConnectionError, WPTimeoutError) as e:
+        return _handle_api_error(e)
+
+
+def _do_menu_item_add(args):  # pragma: no cover
+    """Add an item to a nav menu."""
+    try:
+        client = WPApiClient.from_config(site_name=args.site, debug=args.debug)
+        result = create_menu_item(
+            client,
+            args.menu,
+            title=args.title,
+            url=args.url,
+            object_type=args.object,
+            object_id=args.object_id,
+            item_type=args.type,
+            parent=args.parent,
+            position=args.position,
+        )
+        print("Menu item added successfully!")
+        print(f"  ID:   {result.get('id')}")
+        return 0
+    except ValueError as e:
+        print(f"Error: {e}")
+        return 1
+    except (WPApiError, WPConnectionError, WPTimeoutError) as e:
+        return _handle_api_error(e)
+
+
+def _do_menu_item_update(args):  # pragma: no cover
+    """Update a menu item."""
+    try:
+        client = WPApiClient.from_config(site_name=args.site, debug=args.debug)
+        fields = {}
+        if args.title is not None:
+            fields["title"] = args.title
+        if args.url is not None:
+            fields["url"] = args.url
+        if args.parent is not None:
+            fields["parent"] = args.parent
+        if args.position is not None:
+            fields["menu_order"] = args.position
+        update_menu_item(client, args.id, **fields)
+        print(f"Menu item {args.id} updated successfully!")
+        return 0
+    except ValueError as e:
+        print(f"Error: {e}")
+        return 1
+    except (WPApiError, WPConnectionError, WPTimeoutError) as e:
+        return _handle_api_error(e)
+
+
+def _do_menu_item_delete(args):  # pragma: no cover
+    """Delete a menu item (always permanent)."""
+    try:
+        client = WPApiClient.from_config(site_name=args.site, debug=args.debug)
+        delete_menu_item(client, args.id)
+        print(f"Menu item {args.id} deleted permanently.")
+        return 0
+    except ValueError as e:
+        print(f"Error: {e}")
+        return 1
+    except (WPApiError, WPConnectionError, WPTimeoutError) as e:
+        return _handle_api_error(e)
+
+
+def _do_menu_location_list(args):  # pragma: no cover
+    """List registered menu locations."""
+    try:
+        client = WPApiClient.from_config(site_name=args.site, debug=args.debug)
+        rows = list_menu_locations(client)
+        return _format_list_output(rows, MENU_LOCATION_FIELDS, args)
+    except ValueError as e:
+        print(f"Error: {e}")
+        return 1
+    except (WPApiError, WPConnectionError, WPTimeoutError) as e:
+        return _handle_api_error(e)
 
 
 def _do_option_list(args):  # pragma: no cover
@@ -1700,6 +1873,122 @@ def main(argv=None):
             "plugin", help="Plugin identifier (e.g. akismet/akismet)"
         )
         action_parser.set_defaults(func=action_func)
+
+    # --- wpa menu ---
+    menu_parser = subparsers.add_parser(
+        "menu",
+        help="Nav menu commands (requires edit_theme_options capability)",
+    )
+    menu_subparsers = menu_parser.add_subparsers(dest="menu_command")
+
+    # wpa menu list
+    menu_list_parser = menu_subparsers.add_parser(
+        "list", parents=[shared, list_p], help="List nav menus"
+    )
+    menu_list_parser.add_argument("--search", help="Search menus")
+    menu_list_parser.set_defaults(func=_do_menu_list)
+
+    # wpa menu get <id>
+    menu_get_parser = menu_subparsers.add_parser(
+        "get", parents=[shared], help="Get a single nav menu"
+    )
+    menu_get_parser.add_argument("id", type=int, help="Menu ID")
+    menu_get_parser.add_argument(
+        "--format",
+        default="table",
+        choices=["table", "json"],
+        help="Output format (default: table)",
+    )
+    menu_get_parser.set_defaults(func=_do_menu_get)
+
+    # wpa menu create
+    menu_create_parser = menu_subparsers.add_parser(
+        "create", parents=[shared], help="Create a nav menu"
+    )
+    menu_create_parser.add_argument("--name", required=True, help="Menu name")
+    menu_create_parser.add_argument("--description", help="Menu description")
+    menu_create_parser.set_defaults(func=_do_menu_create)
+
+    # wpa menu delete <id>
+    menu_delete_parser = menu_subparsers.add_parser(
+        "delete",
+        parents=[shared],
+        help="Delete a nav menu (always permanent; deletes its items too)",
+    )
+    menu_delete_parser.add_argument("id", type=int, help="Menu ID to delete")
+    menu_delete_parser.set_defaults(func=_do_menu_delete)
+
+    # wpa menu item <subcommand>
+    menu_item_parser = menu_subparsers.add_parser("item", help="Menu item commands")
+    menu_item_subparsers = menu_item_parser.add_subparsers(dest="menu_item_command")
+
+    # wpa menu item list --menu <id>
+    item_list_parser = menu_item_subparsers.add_parser(
+        "list", parents=[shared, list_p], help="List menu items"
+    )
+    item_list_parser.add_argument("--menu", type=int, help="Filter to one menu's items")
+    item_list_parser.set_defaults(func=_do_menu_item_list)
+
+    # wpa menu item add <menu-id>
+    item_add_parser = menu_item_subparsers.add_parser(
+        "add", parents=[shared], help="Add an item to a menu"
+    )
+    item_add_parser.add_argument("menu", type=int, help="Menu ID to add to")
+    item_add_parser.add_argument(
+        "--title", help="Link text (required for custom links)"
+    )
+    item_add_parser.add_argument("--url", help="Target URL (custom link items)")
+    item_add_parser.add_argument(
+        "--object",
+        help="Linked object slug (page, post, category, post_tag, ...)",
+    )
+    item_add_parser.add_argument(
+        "--object-id", type=int, help="ID of the linked object"
+    )
+    item_add_parser.add_argument(
+        "--type",
+        help="Explicit item type (custom, post_type, taxonomy); "
+        "inferred from --url/--object when omitted",
+    )
+    item_add_parser.add_argument(
+        "--parent", type=int, help="Parent item ID for nested menus"
+    )
+    item_add_parser.add_argument("--position", type=int, help="Menu order (1-based)")
+    item_add_parser.set_defaults(func=_do_menu_item_add)
+
+    # wpa menu item update <id>
+    item_update_parser = menu_item_subparsers.add_parser(
+        "update", parents=[shared], help="Update a menu item"
+    )
+    item_update_parser.add_argument("id", type=int, help="Menu item ID")
+    item_update_parser.add_argument("--title", help="New link text")
+    item_update_parser.add_argument("--url", help="New target URL")
+    item_update_parser.add_argument("--parent", type=int, help="New parent item ID")
+    item_update_parser.add_argument(
+        "--position", type=int, help="New menu order (1-based)"
+    )
+    item_update_parser.set_defaults(func=_do_menu_item_update)
+
+    # wpa menu item delete <id>
+    item_delete_parser = menu_item_subparsers.add_parser(
+        "delete", parents=[shared], help="Delete a menu item (always permanent)"
+    )
+    item_delete_parser.add_argument("id", type=int, help="Menu item ID to delete")
+    item_delete_parser.set_defaults(func=_do_menu_item_delete)
+
+    # wpa menu location list
+    menu_location_parser = menu_subparsers.add_parser(
+        "location", help="Menu location commands"
+    )
+    menu_location_subparsers = menu_location_parser.add_subparsers(
+        dest="menu_location_command"
+    )
+    location_list_parser = menu_location_subparsers.add_parser(
+        "list",
+        parents=[shared, list_p],
+        help="List registered menu locations (read-only)",
+    )
+    location_list_parser.set_defaults(func=_do_menu_location_list)
 
     # --- wpa option ---
     option_parser = subparsers.add_parser(
