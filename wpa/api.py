@@ -393,6 +393,24 @@ class WPApiClient:
         """
         return self._request("GET", self._url(endpoint), params=params)
 
+    def get_root(self, params=None):
+        """GET the REST API root index (/wp-json/).
+
+        The root index lives outside the wp/v2 namespace, so this is the
+        one request that bypasses _url(). The URL is fixed — no
+        user-supplied path segments are involved — and the request still
+        goes through _request(), so auth, the response-size cap, the
+        TLS-downgrade check, and WAF detection all apply.
+
+        Args:
+            params: Optional query parameters (e.g. {'_fields': 'routes'}
+                to keep the potentially large index response small).
+
+        Returns:
+            Parsed JSON response dict.
+        """
+        return self._request("GET", f"{self.site_url}/wp-json/", params=params)
+
     def get_total(self, endpoint, params=None):
         """Return the total number of items in a collection.
 

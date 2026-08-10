@@ -33,6 +33,12 @@ from wpa.comment import (
     validate_fields as validate_comment_fields,
 )
 from wpa.config import create_site_config, list_sites
+from wpa.discover import (
+    list_namespaces,
+    list_routes,
+    validate_namespace_fields,
+    validate_route_fields,
+)
 from wpa.exceptions import WPApiError, WPConnectionError, WPTimeoutError
 from wpa.formatter import format_count, format_field, format_ids, format_output
 from wpa.media import (
@@ -852,6 +858,26 @@ def _do_media_delete(args):  # pragma: no cover
 
 
 # --- Comment handlers ---
+
+
+def _do_api_discover(args):  # pragma: no cover
+    """Show the namespaces (or routes) a site's REST API exposes."""
+    try:
+        client = WPApiClient.from_config(site_name=args.site, debug=args.debug)
+        if args.routes:
+            fields = validate_route_fields(args.fields)
+            rows = list_routes(client, namespace=args.namespace)
+        else:
+            if args.namespace:
+                raise ValueError("--namespace requires --routes.")
+            fields = validate_namespace_fields(args.fields)
+            rows = list_namespaces(client)
+        return _format_list_output(rows, fields, args)
+    except ValueError as e:
+        print(f"Error: {e}")
+        return 1
+    except (WPApiError, WPConnectionError, WPTimeoutError) as e:
+        return _handle_api_error(e)
 
 
 def _do_block_list(args):  # pragma: no cover
@@ -2134,6 +2160,30 @@ def main(argv=None):
     )
     post_type_get_parser.set_defaults(func=_do_post_type_get)
 
+    # --- wpa api ---
+    api_parser = subparsers.add_parser(
+        "api",
+        help="REST API discovery commands",
+    )
+    api_subparsers = api_parser.add_subparsers(dest="api_command")
+
+    # wpa api discover
+    api_discover_parser = api_subparsers.add_parser(
+        "discover",
+        parents=[shared, list_p],
+        help="Enumerate the namespaces and routes a site's REST API exposes",
+    )
+    api_discover_parser.add_argument(
+        "--routes",
+        action="store_true",
+        help="List individual routes with their methods instead of namespaces",
+    )
+    api_discover_parser.add_argument(
+        "--namespace",
+        help="With --routes, only show routes in this namespace (e.g. wp/v2)",
+    )
+    api_discover_parser.set_defaults(func=_do_api_discover)
+
     # --- wpa block ---
     block_parser = subparsers.add_parser(
         "block",
@@ -2760,6 +2810,12 @@ def main(argv=None):
         args, "post_type_command", None
     ):  # pragma: no cover
         post_type_parser.print_help()
+        return 1
+
+    if args.command == "api" and not getattr(
+        args, "api_command", None
+    ):  # pragma: no cover
+        api_parser.print_help()
         return 1
 
     if args.command == "block" and not getattr(
