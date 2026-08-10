@@ -32,7 +32,7 @@ CI runs on ubuntu/macos/windows across Python 3.10, 3.11, 3.12, 3.13, plus a wee
 
 ## Architecture
 
-**Entry point**: `wpa/cli.py` — argparse-based CLI with subcommands (`publish`, `post list/get/create/update/delete`, `page list/get/create/update/delete`, `site add/list`, `user list/get/create/update/delete/set-role`, `media list/get/import/delete`, `comment list/get/create/update/delete/approve/unapprove/spam/unspam/trash/count`, `term list/get/create/update/delete` plus `category`/`tag` aliases, `plugin list/get/activate/deactivate`, `menu list/get/create/delete` with `item` and `location` sub-groups, `widget list/get/update/deactivate/delete`, `option list/get/update`, `sidebar list`).
+**Entry point**: `wpa/cli.py` — argparse-based CLI with subcommands (`publish`, `post list/get/create/update/delete`, `page list/get/create/update/delete`, `site add/list`, `user list/get/create/update/delete/set-role`, `media list/get/import/delete`, `comment list/get/create/update/delete/approve/unapprove/spam/unspam/trash/count`, `term list/get/create/update/delete` plus `category`/`tag` aliases, `plugin list/get/activate/deactivate`, `menu list/get/create/delete` with `item` and `location` sub-groups, `widget list/get/update/deactivate/delete`, `option list/get/update`, `sidebar list`, `taxonomy list/get`, `post-type list/get`, `block list/get`, `theme list/get`, `api discover`).
 
 **Modules**:
 - `cli.py` — Command parsing, dispatches to other modules
@@ -51,11 +51,15 @@ CI runs on ubuntu/macos/windows across Python 3.10, 3.11, 3.12, 3.13, plus a wee
 - `widget.py` — Classic widget management against `/wp-json/wp/v2/widgets`. `list`/`get` (status synthesized from sidebar; `get` flattens instance settings), `update` (move and/or `--instance-json`), `deactivate` (move to `wp_inactive_widgets`), `delete` (default parks inactive, `--force` removes). No `widget add` — per-type instance schemas
 - `option.py` — Registered-settings management against `/wp-json/wp/v2/settings` (single object, not a collection). `list`/`get`/`update` with JSON-typed value parsing; existence-checked before writes so unknown names get the `show_in_rest` explanation
 - `sidebar.py` — Read-only sidebar listing against `/wp-json/wp/v2/sidebars`
+- `taxonomy.py` / `post_type.py` — Read-only introspection of `/wp-json/wp/v2/{taxonomies,types}`. Both endpoints return slug-keyed objects (not arrays, not paginated); rows synthesized and sorted by slug
+- `block.py` — Read-only block-type introspection against `/wp-json/wp/v2/block-types`. `list --namespace` scopes; `get` takes namespaced names (`core/paragraph`) split into two `build_endpoint`-validated segments
+- `theme.py` — Read-only theme info against `/wp-json/wp/v2/themes`. `--status` filter; stylesheets capped at two segments (`parent/child`). Listing all themes requires `switch_themes`
+- `discover.py` — REST surface discovery via the `/wp-json/` root index (`api discover`). Uses `WPApiClient.get_root()` — the one fixed-URL request outside the wp/v2 prefix, still flowing through `_request()` so all client guards apply; `_fields` narrowing keeps responses small
 - `formatter.py` — Shared output formatting (table, json, csv, tsv) with column selection via `--fields`, plus `--ids`, `--count`, `--field` output modifiers
 
 **Global flags**: `--debug` (HTTP request/response details) available on all commands. `--site` selects a named site config.
 
-**Tests**: All in `tests/` (626 tests), use `unittest.mock` to mock HTTP requests. No live WordPress connection needed.
+**Tests**: All in `tests/` (697 tests), use `unittest.mock` to mock HTTP requests. No live WordPress connection needed.
 
 ## Key Conventions
 

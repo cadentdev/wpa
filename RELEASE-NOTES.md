@@ -1,5 +1,78 @@
 # Release Notes
 
+## v0.11.0 — Phase 7: Introspection and Discovery (2026-08-10)
+
+Four read-only command groups plus API surface discovery — PRD Phase 7.
+Where earlier releases managed a site's content and structure, this one
+lets you *ask a site what it is*: which taxonomies, post types, and
+blocks it registers, which themes are installed, and which REST routes
+it actually exposes.
+
+On PyPI as [wpa 0.11.0](https://pypi.org/project/wpa/0.11.0/) —
+`pip install --upgrade wpa`.
+
+### `wpa taxonomy` / `wpa post-type` (#69, #70)
+
+```bash
+wpa taxonomy list                 # which slugs does `term --taxonomy` accept here?
+wpa taxonomy get category
+wpa post-type list
+wpa post-type get post --format json
+```
+
+Both REST endpoints return slug-keyed objects (not arrays, not
+paginated); rows are synthesized and sorted by slug.
+
+### `wpa block` (#71)
+
+```bash
+wpa block list --namespace core   # sites register hundreds — scope the listing
+wpa block get core/paragraph
+```
+
+Block names are namespaced; `get` validates each path segment
+independently.
+
+### `wpa theme` (#73)
+
+```bash
+wpa theme list --status active    # listing ALL themes requires switch_themes
+wpa theme get twentytwentyfive
+```
+
+Read-only by REST API design — activation and installation are not
+exposed. Subdirectory stylesheets (`parent/child`) are supported, capped
+at two segments.
+
+### `wpa api discover` (#72)
+
+```bash
+wpa api discover                  # namespaces: core, plugins, ...
+wpa api discover --routes --namespace wp/v2
+```
+
+Enumerates what a site's REST API actually exposes — the fastest way to
+diagnose disabled endpoints, WAF filtering, or which wpa commands a
+given site can support. Backed by the new `WPApiClient.get_root()`, the
+release's only shared-client change: a fixed-URL GET of `/wp-json/`
+that keeps every client guard (auth, response-size cap, TLS-downgrade
+check, WAF detection) and uses `_fields` narrowing to keep the large
+root index response small.
+
+### Release audit and process
+
+The three-lens release audit (new in the workflow this release) caught
+one hardening gap fixed here — theme stylesheet paths accepted unbounded
+segments; now capped at two — and filed #79 (full-object JSON output for
+`get` commands) and #75 (bare group commands crash instead of printing
+help; the two new groups in this release ship with guards).
+
+`wpa user application-password` (#74), the remaining Phase 7
+deliverable, is deliberately deferred to its own small release so the
+credential-bearing flow gets an undiluted security audit.
+
+697 tests, 98% coverage. All new commands are read-only.
+
 ## v0.10.0 — Phase 6: Plugins, Menus, Widgets, Settings (2026-08-09)
 
 Five new command groups covering PRD Phase 6 — the site-structure tier of

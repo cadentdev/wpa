@@ -1,10 +1,10 @@
 # WPA — Product Requirements Document
 
 **Product:** WPA (WordPress Automation)
-**Version:** PRD v1.4
-**Date:** 2026-08-09
+**Version:** PRD v1.5
+**Date:** 2026-08-10
 **Author:** Neil Johnson, Cadent Creative
-**Current release:** v0.10.0
+**Current release:** v0.11.0
 **Repository:** [github.com/cadentdev/wpa](https://github.com/cadentdev/wpa)
 **PyPI:** [pypi.org/project/wpa](https://pypi.org/project/wpa/)
 **License:** MIT
@@ -163,6 +163,11 @@ wpa/
 ├── widget.py       # Widget subcommand handlers
 ├── option.py       # Settings/option subcommand handlers
 ├── sidebar.py      # Sidebar subcommand handlers
+├── taxonomy.py     # Taxonomy introspection (read-only)
+├── post_type.py    # Post type introspection (read-only)
+├── block.py        # Block type introspection (read-only)
+├── theme.py        # Theme information (read-only)
+├── discover.py     # REST API surface discovery (/wp-json/ root index)
 ├── formatter.py    # Output formatting (table, JSON, CSV, TSV)
 └── __init__.py     # Package version (single source, read by pyproject)
 ```
@@ -233,7 +238,7 @@ These are the quality bars every release meets (folded in from the retired devel
 
 ## 6. Command structure
 
-### 6.1 Implemented commands (v0.10.0)
+### 6.1 Implemented commands (v0.11.0)
 
 **Content publishing**
 
@@ -341,6 +346,22 @@ These are the quality bars every release meets (folded in from the retired devel
 |---|---|
 | `wpa sidebar list` | Read-only listing of registered sidebars |
 
+**Introspection** (Tier 4, shipped v0.11.0; all read-only)
+
+| Command | Description |
+|---|---|
+| `wpa taxonomy list/get` | Registered taxonomies — shows which slugs `wpa term --taxonomy` accepts on a site |
+| `wpa post-type list/get` | Registered post types |
+| `wpa block list/get` | Registered block types. `--namespace` scopes the listing; `get` takes namespaced names (`core/paragraph`) |
+| `wpa api discover` | Namespaces a site's REST API registers; `--routes [--namespace]` lists routes with methods. Diagnoses what a site actually exposes (disabled endpoints, WAF filtering, plugin APIs) |
+
+**Themes** (Tier 5, shipped v0.11.0; read-only)
+
+| Command | Description |
+|---|---|
+| `wpa theme list` | Installed themes with `--status active/inactive/all`. Listing all requires `switch_themes` |
+| `wpa theme get <stylesheet>` | Single theme; subdirectory stylesheets (`parent/child`) supported. Activation/install not exposed by the REST API |
+
 **Site configuration**
 
 | Command | Description |
@@ -357,24 +378,19 @@ These are the quality bars every release meets (folded in from the retired devel
 
 ### 6.2 Planned command groups
 
-Based on the REST API mapping matrix, the following command groups are implementable and prioritized by value. (Tiers 1–3 — posts, pages, users, media, comments, terms, plugins, menus, widgets, settings, and sidebars — shipped in v0.6.0–v0.10.0 and are documented in §6.1. Plugin `install`/`delete` remain open as #41 follow-ups.)
+Based on the REST API mapping matrix, the following command groups are implementable and prioritized by value. (Tiers 1–4 plus themes — posts, pages, users, media, comments, terms, plugins, menus, widgets, settings, sidebars, introspection, and themes — shipped in v0.6.0–v0.11.0 and are documented in §6.1. Plugin `install`/`delete` remain open as #41 follow-ups.)
 
-**Tier 4 — Introspection and discovery**
+**Tier 4 — remaining**
 
 | Command Group | Key Subcommands | REST API Endpoint |
 |---|---|---|
-| `wpa taxonomy` | `list`, `get` | `/wp/v2/taxonomies` |
-| `wpa post-type` | `list`, `get` | `/wp/v2/types` |
-| `wpa block` | `list`, `get` | `/wp/v2/block-types` |
 | `wpa ability` | `list`, `get`, `run` | `/wp/v2/abilities` |
-| `wpa api discover` | List all available REST API endpoints for a site | `GET /wp-json/` |
 
 **Tier 5 — User security management**
 
 | Command Group | Key Subcommands | REST API Endpoint |
 |---|---|---|
-| `wpa user application-password` | `list`, `create`, `delete`, `get` | `/wp/v2/users/<id>/application-passwords` |
-| `wpa theme` | `list`, `get`, `is-active` (read-only) | `/wp/v2/themes` |
+| `wpa user application-password` | `list`, `create`, `delete`, `get` | `/wp/v2/users/<id>/application-passwords` — scoped to its own release (#74) so the credential-bearing flow gets an undiluted audit |
 
 ### 6.3 Global flags
 
@@ -479,16 +495,22 @@ Shipped in v0.8.0 (2026-04-15). See `RELEASE-NOTES.md` for full notes including 
 | `wpa sidebar list` | Shipped v0.10.0 |
 | `wpa option get/update/list` | Shipped v0.10.0 |
 
-### Phase 7: Introspection and discovery (v0.11.0)
+### Phase 7: Introspection and discovery (v0.11.0) — COMPLETE
 
 | Deliverable | Details |
 |---|---|
-| `wpa taxonomy list/get` | List/inspect registered taxonomies |
-| `wpa post-type list/get` | List/inspect registered post types |
-| `wpa block list/get` | List/inspect registered block types |
-| `wpa api discover` | Enumerate all REST API endpoints and their methods for a site |
-| `wpa theme list/get` | Read-only theme information |
-| `wpa user application-password` | Manage application passwords for users |
+| `wpa taxonomy list/get` | Shipped v0.11.0 |
+| `wpa post-type list/get` | Shipped v0.11.0 |
+| `wpa block list/get` | Shipped v0.11.0 (`--namespace` scoping; namespaced `get` names) |
+| `wpa api discover` | Shipped v0.11.0 (namespaces default, `--routes` for full surface) |
+| `wpa theme list/get` | Shipped v0.11.0 (read-only; REST API exposes no activation/install) |
+| `wpa user application-password` | Deferred to its own release (#74) — credential-bearing work gets a small, sharply-audited release per the workflow size gate |
+
+### Phase 7.5: Application passwords (v0.12.0)
+
+| Deliverable | Details |
+|---|---|
+| `wpa user application-password list/create/delete` | #74 — one-time password display, `--debug` redaction, output-format safety |
 
 ### Phase 8: Polish and 1.0 (v1.0.0)
 

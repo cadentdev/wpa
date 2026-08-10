@@ -114,3 +114,10 @@ class TestGetTheme:
         with pytest.raises(ValueError, match="Invalid theme stylesheet"):
             get_theme(mock_client, "")
         mock_client.get.assert_not_called()
+
+    def test_too_many_segments_raises(self, mock_client):
+        # Stylesheets are at most parent/child (subdirectory themes);
+        # anything deeper is not a real theme path.
+        with pytest.raises(ValueError, match="Invalid theme stylesheet"):
+            get_theme(mock_client, "a/b/c")
+        mock_client.get.assert_not_called()
