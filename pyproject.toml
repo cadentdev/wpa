@@ -4,11 +4,11 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "wpa"
-version = "0.8.2"
+dynamic = ["version"]
 description = "WordPress Automation — manage posts, pages, and users via the REST API"
 readme = "README.md"
 license = "MIT"
-requires-python = ">=3.9"
+requires-python = ">=3.10"
 authors = [
     {name = "Neil Stoker"},
 ]
@@ -18,7 +18,6 @@ classifiers = [
     "Environment :: Console",
     "Intended Audience :: Developers",
     "Programming Language :: Python :: 3",
-    "Programming Language :: Python :: 3.9",
     "Programming Language :: Python :: 3.10",
     "Programming Language :: Python :: 3.11",
     "Programming Language :: Python :: 3.12",
@@ -27,19 +26,22 @@ classifiers = [
 ]
 dependencies = [
     "requests",
-    # frontmatter 1.2.0+ imports typing.TypeGuard (3.10+) without declaring
-    # requires-python, so pip on 3.9 installs a version that crashes on import
-    "python-frontmatter<1.2; python_version < '3.10'",
-    "python-frontmatter; python_version >= '3.10'",
+    "python-frontmatter",
     "markdown",
     "python-dotenv",
 ]
 
 [project.optional-dependencies]
+# Lint/audit tools are pinned exactly so CI and contributors run identical
+# versions; bump deliberately and fix any new findings in the same PR (#48).
+# Runtime deps stay unpinned so users get patched versions; add an upper
+# bound only when a specific release is known-broken.
 dev = [
     "pytest",
     "pytest-cov",
-    "ruff",
+    "ruff==0.16.2",
+    "bandit==1.9.4",
+    "pip-audit==2.10.1",
 ]
 
 [project.scripts]
@@ -53,8 +55,11 @@ Issues = "https://github.com/cadentdev/wpa/issues"
 [tool.setuptools.packages.find]
 include = ["wpa*"]
 
+[tool.setuptools.dynamic]
+version = {attr = "wpa.__version__"}
+
 [tool.ruff]
-target-version = "py39"
+target-version = "py310"
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]

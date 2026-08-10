@@ -7,7 +7,8 @@ from wpa.api import build_endpoint
 
 # Character classes for generated passwords. The symbol set is limited to
 # characters that survive shells and the strictest password policies.
-_PASSWORD_SYMBOLS = "!@#$%^*-_+="
+# The nosec suppresses bandit B105 (this alphabet is not a credential).
+_PASSWORD_SYMBOLS = "!@#$%^*-_+="  # nosec B105
 _PASSWORD_ALPHABET = string.ascii_letters + string.digits + _PASSWORD_SYMBOLS
 
 
