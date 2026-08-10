@@ -1,12 +1,16 @@
 # WPA — WordPress Automation
 
 [![CI](https://github.com/cadentdev/wpa/actions/workflows/ci.yml/badge.svg)](https://github.com/cadentdev/wpa/actions/workflows/ci.yml)
-[![Coverage](https://img.shields.io/badge/coverage-99%25-brightgreen)](https://github.com/cadentdev/wpa)
-[![Python](https://img.shields.io/badge/python-3.9%2B-blue)](https://www.python.org)
+[![Coverage](https://img.shields.io/badge/coverage-98%25-brightgreen)](https://github.com/cadentdev/wpa)
+[![Python](https://img.shields.io/badge/python-3.10%2B-blue)](https://www.python.org)
 [![PyPI](https://img.shields.io/pypi/v/wpa)](https://pypi.org/project/wpa/)
 [![License: MIT](https://img.shields.io/badge/license-MIT-green)](LICENSE)
 
 CLI tool for WordPress automation — manage posts, pages, users, media, comments, and taxonomy terms via the REST API.
+
+## What is WPA?
+
+WPA brings command-line WordPress management to any machine that can run Python — no server access, no PHP, no WordPress installation on the client side. Every operation is an authenticated REST API request scoped to a WordPress user's role, which makes WPA safe for remote administration, CI pipelines, and AI agents: the tool physically cannot exceed the permissions of the Application Password it holds. It complements (rather than replaces) [wp-cli](https://wp-cli.org), covering the content- and user-management subset of WordPress that the REST API exposes, with command names wp-cli users will recognize.
 
 ## Install
 

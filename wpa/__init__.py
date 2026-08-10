@@ -1,3 +1,3 @@
 """WordPress Automation — manage posts, pages, and users via the REST API."""
 
-__version__ = "0.8.2"
+__version__ = "0.9.0"
