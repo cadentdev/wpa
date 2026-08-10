@@ -1,10 +1,10 @@
 # WPA — Product Requirements Document
 
 **Product:** WPA (WordPress Automation)
-**Version:** PRD v1.2
-**Date:** 2026-04-14
+**Version:** PRD v1.3
+**Date:** 2026-08-09
 **Author:** Neil Johnson, Cadent Creative
-**Current release:** v0.8.2
+**Current release:** v0.9.0
 **Repository:** [github.com/cadentdev/wpa](https://github.com/cadentdev/wpa)
 **PyPI:** [pypi.org/project/wpa](https://pypi.org/project/wpa/)
 **License:** MIT
@@ -48,7 +48,7 @@ This isn't a limitation — it's a feature. Access control is enforced by WordPr
 
 wp-cli requires PHP (7.2.24+), a local WordPress installation or SSH access to one, and the wp-cli binary itself. This means it cannot run on machines without PHP, cannot operate remotely without SSH, and cannot be used in environments where installing PHP is impractical or prohibited.
 
-WPA requires Python (3.9+) and nothing else. There is no PHP dependency, no WordPress installation needed on the client, no server access of any kind. The only runtime dependencies are Python standard library modules plus `requests` (HTTP), `python-frontmatter` (markdown parsing), `markdown` (conversion), and `python-dotenv` (config). These are lightweight, well-maintained, and universally available.
+WPA requires Python (3.10+) and nothing else. There is no PHP dependency, no WordPress installation needed on the client, no server access of any kind. The only runtime dependencies are Python standard library modules plus `requests` (HTTP), `python-frontmatter` (markdown parsing), `markdown` (conversion), and `python-dotenv` (config). These are lightweight, well-maintained, and universally available.
 
 This makes WPA usable in environments where wp-cli cannot run: CI/CD pipelines that don't have PHP, developer workstations that don't need PHP for their primary work, containerized build systems, cloud functions, Chromebooks, and any machine where `pip install wpa` is all you need.
 
@@ -58,12 +58,12 @@ This is the forward-looking case that motivated WPA's creation and will drive it
 
 AI coding agents like Claude Code operate by executing shell commands on behalf of a user. When an agent needs to interact with a WordPress site, the available options today are poor: give the agent SSH access and let it run wp-cli (granting unrestricted server access), or have the agent write and execute Python scripts against a REST API library (slow, error-prone, no command-line composability).
 
-WPA provides a third path that is purpose-built for this use case. An agent can run `wpa post list --site myblog --json` the same way it would run `git status` or `ls -la` — as a simple shell command that returns structured data. The security model is inherently right for agent use:
+WPA provides a third path that is purpose-built for this use case. An agent can run `wpa post list --site myblog --format json` the same way it would run `git status` or `ls -la` — as a simple shell command that returns structured data. The security model is inherently right for agent use:
 
 - **Principle of least privilege.** Create a dedicated WordPress user with only the capabilities the agent needs. Issue an Application Password for that user. The agent physically cannot exceed those permissions — not because of prompt engineering or safety rails, but because the WordPress REST API enforces it at the server.
 - **Auditable operations.** Every action the agent takes is an HTTP request to a known endpoint. These requests appear in web server logs, can be monitored by WordPress audit plugins, and can be rate-limited by standard web infrastructure. There is no opaque "the agent ran some PHP" — every operation is visible and traceable.
 - **Revocable credentials.** Application Passwords can be revoked instantly from the WordPress admin panel. If an agent's credentials are compromised or the agent misbehaves, access is cut off with a single click. No server access is needed to revoke access.
-- **Composable with other CLI tools.** Because WPA returns structured output (JSON with `--json`, human-readable tables by default), agents can pipe `wpa` output to other tools, parse it programmatically, and build multi-step workflows without writing custom integration code.
+- **Composable with other CLI tools.** Because WPA returns structured output (JSON with `--format json`, human-readable tables by default), agents can pipe `wpa` output to other tools, parse it programmatically, and build multi-step workflows without writing custom integration code.
 
 ### 2.4 Remote operation by default
 
@@ -91,7 +91,7 @@ wp-cli operations, by contrast, happen inside PHP execution and are largely invi
 
 ### 2.7 Predictable JSON output for automation
 
-The WordPress REST API returns JSON natively. When WPA adds `--json` output formatting, it passes through what the API already returns — no serialization conversion, no format ambiguity. This makes WPA output directly consumable by `jq`, Python scripts, other CLI tools, and AI agents without parsing human-readable table output.
+The WordPress REST API returns JSON natively. When WPA adds `--format json` output formatting, it passes through what the API already returns — no serialization conversion, no format ambiguity. This makes WPA output directly consumable by `jq`, Python scripts, other CLI tools, and AI agents without parsing human-readable table output.
 
 wp-cli supports JSON output via `--format=json`, but the output is serialized from PHP objects — a conversion step that can introduce inconsistencies with the REST API's native JSON representation. WPA's output is the REST API's output, processed only for display formatting.
 
@@ -129,11 +129,11 @@ Draft status by default for content creation. HTTPS enforcement for public URLs.
 
 ### 4.4 Structured output for machines, readable output for humans
 
-The default output format should be human-readable (tables or clean text). A `--json` flag should produce machine-parseable JSON output that passes through the REST API's native response format. Both formats should be available for every command that returns data.
+The default output format should be human-readable (tables or clean text). A `--format json` flag should produce machine-parseable JSON output that passes through the REST API's native response format. Both formats should be available for every command that returns data.
 
 ### 4.5 Minimal dependencies, maximum portability
 
-WPA should work anywhere Python 3.9+ runs. Dependencies should be limited to well-maintained, widely-available packages. No C extensions, no system-level dependencies, no optional features that require additional installs.
+WPA should work anywhere Python 3.10+ runs. Dependencies should be limited to well-maintained, widely-available packages. No C extensions, no system-level dependencies, no optional features that require additional installs.
 
 ### 4.6 Accessible to WordPress newcomers
 
@@ -151,18 +151,19 @@ wpa/
 ├── config.py       # Site configuration management (XDG, .env)
 ├── publish.py      # Markdown-to-WordPress publishing
 ├── api.py          # REST API client layer (HTTP, auth, pagination)
+├── exceptions.py   # Custom exceptions (WPApiError, WPConnectionError, ...)
 ├── post.py         # Post subcommand handlers
 ├── page.py         # Page subcommand handlers
 ├── user.py         # User subcommand handlers
 ├── comment.py      # Comment subcommand handlers
 ├── media.py        # Media subcommand handlers
 ├── term.py         # Term/taxonomy subcommand handlers
-├── plugin.py       # Plugin subcommand handlers
-├── menu.py         # Menu subcommand handlers
-├── widget.py       # Widget subcommand handlers
-├── option.py       # Settings/option subcommand handlers
-├── format.py       # Output formatting (table, JSON, CSV)
-└── __init__.py
+├── plugin.py       # Plugin subcommand handlers      (planned, Phase 6)
+├── menu.py         # Menu subcommand handlers        (planned, Phase 6)
+├── widget.py       # Widget subcommand handlers      (planned, Phase 6)
+├── option.py       # Settings/option subcommand handlers (planned, Phase 6)
+├── formatter.py    # Output formatting (table, JSON, CSV, TSV)
+└── __init__.py     # Package version (single source, read by pyproject)
 ```
 
 ### 5.2 API client layer
@@ -178,17 +179,31 @@ The `api.py` module handles all HTTP communication with WordPress REST API endpo
 
 ### 5.3 Output formatting
 
-The `format.py` module provides consistent output across all commands:
+The `formatter.py` module provides consistent output across all commands:
 
 | Format | Flag | Description |
 |---|---|---|
 | Table | (default) | Human-readable aligned columns |
-| JSON | `--json` | Raw REST API JSON response |
-| IDs | `--ids` | Space-separated list of resource IDs |
+| JSON | `--format json` | REST API JSON response |
+| CSV | `--format csv` | Comma-separated values with header row |
+| TSV | `--format tsv` | Tab-separated values with header row |
+| IDs | `--ids` | Resource IDs only, one per line |
 | Count | `--count` | Numeric count of results |
-| CSV | `--csv` | Comma-separated values with header row |
 
-The `--fields` flag limits output to specific fields. The `--field` flag (singular) outputs a single field value per result, one per line.
+The `--fields` flag limits output to specific columns. The `--field` flag (singular) outputs a single field value per result, one per line.
+
+Each resource defines sensible default table columns:
+
+| Resource | Default table fields |
+|---|---|
+| post | `id`, `title`, `status`, `date`, `author` |
+| page | `id`, `title`, `status`, `date`, `slug` |
+| user | `id`, `username`, `email`, `display_name`, `roles` |
+| comment | `id`, `post`, `author_name`, `status`, `date` |
+| media | `id`, `title`, `mime_type`, `date` |
+| term | `id`, `name`, `slug`, `count` |
+
+The `--fields` flag overrides these defaults.
 
 ### 5.4 Multi-site configuration
 
@@ -203,17 +218,27 @@ WP_ADMIN_PATH=wp-admin
 
 The `--site` flag selects a named config. With one config, it auto-selects. With multiple configs and no `--site` flag, WPA prompts for selection. This behavior is already implemented in v0.4.0.
 
+### 5.5 Engineering standards
+
+These are the quality bars every release meets (folded in from the retired development-recommendations document; the full release workflow lives in `CLAUDE.md`):
+
+- **Test-driven:** failing tests are written before new behavior is implemented. Coverage stays ≥98%; only thin CLI adapter functions in `cli.py` may be excluded via `# pragma: no cover`.
+- **Single HTTP boundary:** no module other than `api.py` imports `requests`. New command groups are thin layers of argument parsing over `api.py` + `formatter.py`.
+- **CI green across the matrix** (ubuntu/macos/windows × supported Python versions) before merge, including ruff lint/format, bandit static analysis, and pip-audit dependency checks.
+- **Pinned tooling, unpinned runtime deps:** lint/audit tools are pinned exactly (bumped deliberately, fixing new findings in the bumping PR); runtime dependencies stay unpinned so users receive patched versions, upper-bounded only when a release is known-broken.
+- **Safety caps stay on:** protective limits (response size, pagination) are tunable but never disableable by misconfiguration.
+
 ---
 
 ## 6. Command structure
 
-### 6.1 Implemented commands (v0.7.0)
+### 6.1 Implemented commands (v0.9.0)
 
 **Content publishing**
 
 | Command | Description |
 |---|---|
-| `wpa publish <file.md>` | Publish a markdown file as a WordPress page (uses `api.py` via `publish.py`) |
+| `wpa publish <file.md>` | Publish a markdown file as a WordPress page. `--author` flag or `author:` frontmatter attributes the page (v0.9.0) |
 
 **Posts** (Tier 1, shipped v0.6.0)
 
@@ -221,7 +246,7 @@ The `--site` flag selects a named config. With one config, it auto-selects. With
 |---|---|
 | `wpa post list` | List posts with `--status`, `--author`, `--category`, `--tag`, `--search`, `--orderby`, `--order`, `--per-page` |
 | `wpa post get <id>` | Get a single post by ID |
-| `wpa post create` | Create a post from CLI flags (`--title`, `--content`, `--status`, `--author`, `--category`, `--tag`, `--featured-media`) |
+| `wpa post create` | Create a post from CLI flags (`--title`, `--content`, `--status`, `--author`, `--category`, `--tag`, `--featured-media`) or from a markdown file with `--file` (v0.8.2); CLI flags override frontmatter |
 | `wpa post update <id>` | Update post fields |
 | `wpa post delete <id>` | Trash or `--force` delete a post |
 
@@ -231,18 +256,18 @@ The `--site` flag selects a named config. With one config, it auto-selects. With
 |---|---|
 | `wpa page list` | List pages with `--status`, `--search`, `--parent`, `--orderby`, `--order` |
 | `wpa page get <id>` | Get a single page by ID |
-| `wpa page create <file.md>` | Create a page from a markdown file with frontmatter (pre-existing, refactored to `api.py` in v0.6.0) |
+| `wpa page create <file.md>` | Create a page from a markdown file with frontmatter (positional or `--file`; since v0.8.2 metadata flags like `--parent`/`--author` apply and override frontmatter) |
 | `wpa page create --title --content` | Create a page from CLI flags |
 | `wpa page update <id>` | Update page fields |
 | `wpa page delete <id>` | Trash or `--force` delete a page |
 
-**Users** (shipped v0.5.0, extended v0.6.0 and v0.7.0)
+**Users** (shipped v0.5.0, extended v0.6.0, v0.7.0, and v0.8.1)
 
 | Command | Description |
 |---|---|
 | `wpa user list` | List users with `--role`, `--search`, `--format`, `--fields` |
 | `wpa user get <id>` | Get a single user by ID (v0.7.0) |
-| `wpa user create` | Create user with `--username`, `--email`, `--role`, `--password` |
+| `wpa user create` | Create user with `--username`, `--email`, `--role`. Generates a strong password (never displayed) unless `--password-stdin` supplies one; `--send-email` triggers WordPress's set-password email via the lost-password flow (v0.8.1; the `--password` flag was removed the same release) |
 | `wpa user update <id>` | Update user fields |
 | `wpa user set-role <id> <role>` | Shortcut for role changes, wp-cli-compatible (v0.7.0) |
 | `wpa user delete <id>` | Delete user with `--reassign` |
@@ -255,6 +280,26 @@ The `--site` flag selects a named config. With one config, it auto-selects. With
 | `wpa media get <id>` | Get a single media item by ID (supports `--format json` for scripted access to fields like `source_url`) |
 | `wpa media import <file>` | Upload a local file as a WordPress media item via multipart POST. Optional `--title`, `--alt-text`, `--caption`, `--description`, `--post` (attach to parent post). |
 | `wpa media delete <id>` | Trash or `--force` delete a media item |
+
+**Comments** (Tier 2, shipped v0.8.0; `count` added v0.8.2)
+
+| Command | Description |
+|---|---|
+| `wpa comment list` | List comments with `--post`, `--status`, `--parent`, `--author-email`, `--search` |
+| `wpa comment get <id>` | Get a single comment by ID |
+| `wpa comment create` | Create a comment on a post (`--post`, `--content`, `--author-name`, `--author-email`) |
+| `wpa comment update <id>` | Update comment content or metadata |
+| `wpa comment delete <id>` | Trash or `--force` delete a comment |
+| `wpa comment approve/unapprove/spam/unspam/trash <id>` | Moderation shortcuts, wp-cli-compatible |
+| `wpa comment count` | Per-status totals via the `X-WP-Total` header — one lightweight request per status (v0.8.2) |
+
+**Taxonomy terms** (Tier 2, shipped v0.8.0)
+
+| Command | Description |
+|---|---|
+| `wpa term list/get/create/update/delete` | CRUD for any taxonomy via `--taxonomy <slug>` (built-in or custom). Delete is always permanent — the REST API cannot trash terms |
+| `wpa category …` | Alias for `wpa term --taxonomy category` |
+| `wpa tag …` | Alias for `wpa term --taxonomy post_tag` |
 
 **Site configuration**
 
@@ -272,25 +317,7 @@ The `--site` flag selects a named config. With one config, it auto-selects. With
 
 ### 6.2 Planned command groups
 
-Based on the REST API mapping matrix, the following command groups are implementable and prioritized by value:
-
-**Tier 1 — Core content management (highest priority)**
-
-| Command Group | Key Subcommands | REST API Endpoint |
-|---|---|---|
-| `wpa post` | `list`, `get`, `create`, `update`, `delete` | `/wp/v2/posts` |
-| `wpa page` | `list`, `get`, `create`, `update`, `delete` | `/wp/v2/pages` |
-| `wpa user` | `list`, `get`, `create`, `update`, `delete`, `set-role` | `/wp/v2/users` |
-| `wpa media` | `import`, `list`, `get`, `delete` | `/wp/v2/media` |
-
-**Tier 2 — Content organization and moderation**
-
-| Command Group | Key Subcommands | REST API Endpoint |
-|---|---|---|
-| `wpa comment` | `list`, `get`, `create`, `update`, `delete`, `approve`, `spam`, `trash` | `/wp/v2/comments` |
-| `wpa term` | `list`, `get`, `create`, `update`, `delete` (for categories, tags, custom taxonomies) | `/wp/v2/categories`, `/wp/v2/tags`, etc. |
-| `wpa category` | Alias for `wpa term` with `--taxonomy=category` | `/wp/v2/categories` |
-| `wpa tag` | Alias for `wpa term` with `--taxonomy=post_tag` | `/wp/v2/tags` |
+Based on the REST API mapping matrix, the following command groups are implementable and prioritized by value. (Tiers 1 and 2 — posts, pages, users, media, comments, and terms — shipped in v0.6.0–v0.8.0 and are documented in §6.1.)
 
 **Tier 3 — Site configuration and structure**
 
@@ -397,7 +424,20 @@ Based on the REST API mapping matrix, the following command groups are implement
 
 Shipped in v0.8.0 (2026-04-15). See `RELEASE-NOTES.md` for full notes including the `status=approve` WP REST API asymmetry bug caught during Phase 8c live smoke test, and the `_resolve_endpoint` case-sensitivity bug caught during Phase 4 refactor.
 
-### Phase 5: Plugins, menus, and widgets (v0.9.0)
+### Phase 5: Housekeeping (v0.9.0) — COMPLETE
+
+**Shipped:** v0.9.0, 2026-08-09. A hardening/infrastructure release between the Phase 4 and Phase 6 feature work.
+
+| Deliverable | Status |
+|---|---|
+| Drop Python 3.9 (EOL Oct 2025); floor is now 3.10 | Shipped v0.9.0 |
+| Single-source the version string (`dynamic = ["version"]` reads `wpa/__init__.py`) | Shipped v0.9.0 |
+| Pin lint/audit tooling exactly; bandit + pip-audit in CI; weekly drift-catching CI run | Shipped v0.9.0 |
+| `wpa publish --author` + `author:` frontmatter across all markdown inputs | Shipped v0.9.0 |
+| Env-configurable safety caps (`WPA_MAX_RESPONSE_BYTES`, `WPA_MAX_TOTAL_PAGES`) | Shipped v0.9.0 |
+| Docs current: PRD refresh, README positioning, recommendations doc folded in and archived | Shipped v0.9.0 |
+
+### Phase 6: Plugins, menus, and widgets (v0.10.0)
 
 | Deliverable | Details |
 |---|---|
@@ -407,7 +447,7 @@ Shipped in v0.8.0 (2026-04-15). See `RELEASE-NOTES.md` for full notes including 
 | `wpa sidebar list` | List registered sidebars |
 | `wpa option` subcommands | `get`, `update`, `list` for registered settings |
 
-### Phase 6: Introspection and discovery (v0.10.0)
+### Phase 7: Introspection and discovery (v0.11.0)
 
 | Deliverable | Details |
 |---|---|
@@ -418,7 +458,7 @@ Shipped in v0.8.0 (2026-04-15). See `RELEASE-NOTES.md` for full notes including 
 | `wpa theme list/get` | Read-only theme information |
 | `wpa user application-password` | Manage application passwords for users |
 
-### Phase 7: Polish and 1.0 (v1.0.0)
+### Phase 8: Polish and 1.0 (v1.0.0)
 
 | Deliverable | Details |
 |---|---|
@@ -438,10 +478,11 @@ These documents are maintained alongside this PRD in the `wpa` repository and sh
 |---|---|
 | `docs/wp-cli-command-inventory.md` | Complete catalog of all WP-CLI 2.12.0 commands and subcommands (46 top-level groups, ~280+ subcommands) |
 | `docs/wp-cli-rest-api-mapping-matrix.md` | Classification of every WP-CLI command against REST API feasibility (FULL / PARTIAL / NOT POSSIBLE / N/A) |
-| `docs/wpa-development-recommendations.md` | Prioritized development recommendations for the current sprint |
 | `RELEASE-NOTES.md` | Per-version changelog |
 | `CONTRIBUTING.md` | Contribution guidelines |
-| `CLAUDE.md` | Agent-facing documentation for Claude Code |
+| `CLAUDE.md` | Agent-facing documentation for Claude Code, including the release workflow |
+
+(The former `docs/wpa-development-recommendations.md` sprint document is archived at `docs/archive/`; its durable content was folded into §5.3, §5.5, and CLAUDE.md's release workflow in PRD v1.3.)
 
 ---
 
@@ -493,7 +534,7 @@ These documents are maintained alongside this PRD in the `wpa` repository and sh
 | Authentication model | Server-side PHP user | Application Passwords (role-based) | Application Passwords / OAuth |
 | Remote operation | Via SSH only | Native (HTTPS) | Native (HTTPS) |
 | Multi-site management | One site at a time | Built-in multi-site config | Manual per-instance |
-| JSON output | `--format=json` | `--json` (native REST API JSON) | Programmatic |
+| JSON output | `--format=json` | `--format json` (native REST API JSON) | Programmatic |
 | AI agent safe | No (unrestricted access) | Yes (role-bounded permissions) | N/A (no CLI) |
 | Command coverage | ~280+ commands | ~95 (REST API subset) | Varies |
 | Plugin install/activate | Yes | Yes (via REST API) | Yes |

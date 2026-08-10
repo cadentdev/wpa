@@ -50,7 +50,7 @@ CI runs on ubuntu/macos/windows across Python 3.10, 3.11, 3.12, 3.13, plus a wee
 
 **Global flags**: `--debug` (HTTP request/response details) available on all commands. `--site` selects a named site config.
 
-**Tests**: All in `tests/` (503 tests), use `unittest.mock` to mock HTTP requests. No live WordPress connection needed.
+**Tests**: All in `tests/` (520 tests), use `unittest.mock` to mock HTTP requests. No live WordPress connection needed.
 
 ## Key Conventions
 
@@ -92,6 +92,6 @@ Every release follows this arc. Steps 1–3 are planning, 4–6 repeat per PR, 7
 
 ## Key Documents
 
-- `wpa-prd.md` — Product Requirements Document: vision, design principles, full command structure, and implementation roadmap (Phases 1–6 toward v1.0)
+- `wpa-prd.md` — Product Requirements Document: vision, design principles, full command structure, and implementation roadmap (Phases 1–8 toward v1.0)
 - `docs/wp-cli-command-inventory.md` — Complete catalog of all WP-CLI 2.12.0 commands (~280+ subcommands across 46 groups), used as the template for WPA command planning
 - `docs/wp-cli-rest-api-mapping-matrix.md` — Classification of every WP-CLI command against REST API feasibility (FULL / PARTIAL / NOT POSSIBLE / N/A), drives the implementation roadmap

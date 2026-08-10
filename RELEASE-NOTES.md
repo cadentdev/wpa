@@ -1,5 +1,86 @@
 # Release Notes
 
+## v0.9.0 — Housekeeping: Python 3.10 Floor + Author Attribution (2026-08-09)
+
+A hardening and infrastructure release. The minor-version bump signals one
+compatibility change: **Python 3.9 is no longer supported.**
+
+On PyPI as [wpa 0.9.0](https://pypi.org/project/wpa/0.9.0/) —
+`pip install --upgrade wpa`.
+
+### BREAKING: Python 3.10+ required (#49)
+
+Python 3.9 reached end-of-life in October 2025, the ecosystem had moved on
+(`python-frontmatter` 1.2+ requires 3.10), and PyPI download stats showed
+zero wpa installs on 3.9. `requires-python = ">=3.10"` means pip on 3.9
+simply keeps offering v0.8.2 and earlier — nothing breaks in place. The
+frontmatter version cap that protected 3.9 installs is gone, and ruff now
+targets `py310`.
+
+### `--author` for markdown publishing (#26)
+
+`wpa publish` gains `--author`, and the `author:` frontmatter field now
+applies everywhere markdown input is accepted — `publish`,
+`post create --file`, and `page create --file` — with the CLI flag winning
+over frontmatter, same as title/status/slug:
+
+```bash
+wpa publish page.md --site mysite --author 15
+```
+
+Author values are validated strictly: non-numeric, boolean (`author: true`
+is YAML for the literal *true*, not a user), and fractional values are
+rejected with a clear error instead of being silently coerced — the
+boolean/float cases were caught by this release's security audit before
+they could misattribute content to user ID 1.
+
+### Configurable safety caps (#37, audit follow-up M2)
+
+The v0.8.0 hardening caps are now tunable per environment:
+
+| Variable | Default |
+|---|---|
+| `WPA_MAX_RESPONSE_BYTES` | 50 MB per REST response |
+| `WPA_MAX_TOTAL_PAGES` | 1000 pages per list command |
+
+Parsing is fail-safe: invalid values (non-integer, zero, negative) warn on
+stderr and keep the default, so a misconfigured environment can resize the
+caps but never disable them.
+
+### Infrastructure (#48)
+
+- **Version single-sourced:** `pyproject.toml` now reads the version from
+  `wpa/__init__.py` via `dynamic = ["version"]`, ending the dual-bump
+  gotcha that caused the 0.8.0/0.8.1 drift.
+- **Pinned tooling:** ruff, bandit, and pip-audit are pinned exactly in the
+  `dev` extra so CI and contributors run identical versions; bumps are
+  deliberate, with new findings fixed in the bumping PR. Runtime deps stay
+  unpinned so users get patched versions.
+- **Security audits in CI:** bandit + pip-audit now run on the required CI
+  job for every PR, plus a weekly scheduled run on `main` catches
+  dependency drift by cron instead of by the next feature PR.
+- **Release workflow codified:** the 12-step release arc (issue collection
+  → semver gate → per-PR TDD → security audit → docs → tag → verify/retro)
+  is recorded in CLAUDE.md.
+
+### Documentation
+
+- PRD refreshed to v1.3: implemented-commands section now covers everything
+  through v0.9.0 (it had stalled at v0.7.0 and still documented the removed
+  `--password` flag), roadmap renumbered (Phase 5 = this release; plugins/
+  menus/widgets move to v0.10.0), output-flag docs aligned with the shipped
+  `--format` interface, and a new §5.5 Engineering Standards section.
+- The March sprint document `wpa-development-recommendations.md` was folded
+  into the PRD and archived; its one unshipped idea became #57
+  (`post create --stdin`).
+- README gains a "What is WPA?" positioning section.
+
+### Quality
+
+- **Tests:** 520 total, +17 from v0.8.2 (author resolution/validation,
+  env-cap overrides and fail-safe fallback, functional cap enforcement).
+- 98% coverage; ruff, bandit, and pip-audit clean.
+
 ## v0.8.2 — Quick Wins: Comment Counts + Markdown Input (2026-08-08)
 
 Two quality-of-life features rolled up from the issue backlog.
