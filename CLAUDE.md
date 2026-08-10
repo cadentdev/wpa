@@ -74,7 +74,10 @@ Every release follows this arc. Steps 1–3 are planning, 4–6 repeat per PR, 7
    approved before implementation starts.
 4. **TDD loop (per PR)** — write failing tests for the new behavior first, implement until GREEN,
    refactor. Coverage stays ≥98%; only thin CLI adapter functions may use `# pragma: no cover`.
-5. **CI green (per PR)** — full matrix passes, including ruff, bandit, and pip-audit.
+5. **CI green (per PR)** — full matrix passes, including ruff, bandit, and pip-audit. Timing notes:
+   `gh pr checks <n> --watch` reports "no checks" if run within seconds of PR creation — wait ~30s
+   first. Stacked PRs (base ≠ main) get no CI runs at all until rebased onto main after their base
+   merges; ci.yml only triggers on PRs targeting main.
 6. **Merge (per PR)** — merge-commit strategy (not squash). Surface discovered smells as new issues
    rather than widening the PR.
 7. **Security audit** — human review of the full release diff (not just tool output). File findings
