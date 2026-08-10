@@ -87,6 +87,10 @@ wpa page create --site mysite --title "About" --content "<p>About us</p>"
 # Publish shortcut (equivalent to wpa page create with markdown)
 wpa publish pages/your-page.md --site mysite
 
+# Publish attributed to a specific author (or set `author: 15` in
+# frontmatter; the CLI flag wins when both are given)
+wpa publish pages/your-page.md --site mysite --author 15
+
 # Update a page
 wpa page update 42 --site mysite --title "New Title" --parent 10
 
@@ -269,6 +273,7 @@ wpa --version
 title: "Your Page Title"
 slug: "your-page-slug"
 status: draft
+author: 15
 ---
 
 Page content in markdown here...
@@ -277,6 +282,7 @@ Page content in markdown here...
 - `title` (required): Page title
 - `slug` (optional): URL slug
 - `status` (optional): `draft` (default), `publish`, `pending`, or `private`
+- `author` (optional): Author user ID; the `--author` CLI flag overrides it
 
 ### Site config format
 
@@ -291,6 +297,17 @@ WP_ADMIN_PATH=wp-admin
 
 - `WP_ADMIN_PATH` is optional (defaults to `wp-admin`). Override it if your site uses a custom admin URL.
 - The `XDG_CONFIG_HOME` environment variable is respected if set.
+
+### Environment variables
+
+Two protective caps in the API client can be resized per environment:
+
+| Variable | Default | Purpose |
+|---|---|---|
+| `WPA_MAX_RESPONSE_BYTES` | `52428800` (50 MB) | Maximum size of a single REST API response |
+| `WPA_MAX_TOTAL_PAGES` | `1000` | Ceiling on pages fetched by paginated list commands |
+
+Invalid values (non-integer, zero, negative) are ignored with a warning and the default applies — a misconfigured environment can resize the caps but never disable them.
 
 ### Migration from repo-root .env
 

@@ -208,6 +208,24 @@ class TestPublishPage:
         data = mock_client.post.call_args[1]["data"]
         assert "slug" not in data
 
+    def test_author_included_in_payload(self, mock_client):
+        """publish_page sends author when one is given."""
+        mock_client.post.return_value = {"id": 1}
+
+        publish_page(mock_client, "Title", "", "draft", "<p>Content</p>", author=15)
+
+        data = mock_client.post.call_args[1]["data"]
+        assert data["author"] == 15
+
+    def test_author_omitted_when_none(self, mock_client):
+        """publish_page leaves author out of the payload by default."""
+        mock_client.post.return_value = {"id": 1}
+
+        publish_page(mock_client, "Title", "", "draft", "<p>Content</p>")
+
+        data = mock_client.post.call_args[1]["data"]
+        assert "author" not in data
+
     def test_api_error_returns_one(self, mock_client, capsys):
         """publish_page returns 1 and prints error on API error."""
         mock_client.post.side_effect = WPApiError(
@@ -1117,14 +1135,15 @@ class TestResolveFileFields:
         }
 
     def test_frontmatter_only(self):
-        title, content, status, slug = resolve_file_fields(self._file_data())
+        title, content, status, slug, author = resolve_file_fields(self._file_data())
         assert title == "From File"
         assert content == "<p>Body</p>"
         assert status == "publish"
         assert slug == "from-file"
+        assert author is None
 
     def test_cli_flags_override_frontmatter(self):
-        title, content, status, slug = resolve_file_fields(
+        title, content, status, slug, _author = resolve_file_fields(
             self._file_data(), title="CLI Title", status="draft", slug="cli-slug"
         )
         assert title == "CLI Title"
@@ -1134,9 +1153,35 @@ class TestResolveFileFields:
         assert content == "<p>Body</p>"
 
     def test_defaults_when_frontmatter_sparse(self):
-        title, _content, status, slug = resolve_file_fields(
+        title, _content, status, slug, author = resolve_file_fields(
             {"title": "Minimal", "slug": "", "status": "", "content": "<p>x</p>"}
         )
         assert title == "Minimal"
         assert status == "draft"
         assert slug is None
+        assert author is None
+
+    def test_author_from_frontmatter(self):
+        data = {**self._file_data(), "author": 15}
+        *_rest, author = resolve_file_fields(data)
+        assert author == 15
+
+    def test_cli_author_overrides_frontmatter(self):
+        data = {**self._file_data(), "author": 15}
+        *_rest, author = resolve_file_fields(data, author=20)
+        assert author == 20
+
+    def test_author_string_digits_coerced_to_int(self):
+        data = {**self._file_data(), "author": "15"}
+        *_rest, author = resolve_file_fields(data)
+        assert author == 15
+
+    def test_author_non_numeric_raises(self):
+        data = {**self._file_data(), "author": "jane"}
+        with pytest.raises(ValueError, match="author"):
+            resolve_file_fields(data)
+
+    def test_author_non_positive_raises(self):
+        data = {**self._file_data(), "author": 0}
+        with pytest.raises(ValueError, match="author"):
+            resolve_file_fields(data)

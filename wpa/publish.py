@@ -74,32 +74,58 @@ def parse_page(filepath):
     return data["title"], data["slug"], data["status"], data["content"]
 
 
-def resolve_file_fields(file_data, title=None, status=None, slug=None):
+def resolve_file_fields(file_data, title=None, status=None, slug=None, author=None):
     """Merge markdown-file fields with CLI flag overrides.
 
-    Used by `post create --file` / `page create --file`: the file's YAML
-    frontmatter supplies title/status/slug and the converted HTML body,
-    and any CLI flag that was explicitly passed wins over frontmatter.
+    Used by `publish` and `post create --file` / `page create --file`: the
+    file's YAML frontmatter supplies title/status/slug/author and the
+    converted HTML body, and any CLI flag that was explicitly passed wins
+    over frontmatter.
 
     Args:
-        file_data: Dict from parse_markdown() (title, slug, status, content).
+        file_data: Dict from parse_markdown() (title, slug, status, content,
+            and optionally author).
         title: CLI --title override, or None.
         status: CLI --status override, or None.
         slug: CLI --slug override, or None.
+        author: CLI --author override, or None.
 
     Returns:
-        Tuple of (title, content, status, slug) with overrides applied.
-        status falls back to 'draft', slug to None when empty.
+        Tuple of (title, content, status, slug, author) with overrides
+        applied. status falls back to 'draft', slug to None when empty,
+        author to None when absent.
+
+    Raises:
+        ValueError: If the frontmatter author is not a positive integer.
     """
+    if author is None:
+        author = file_data.get("author")
+    if author is not None:
+        try:
+            author = int(author)
+        except (TypeError, ValueError):
+            raise ValueError(
+                f"Frontmatter 'author' must be a user ID "
+                f"(positive integer), got {author!r}"
+            ) from None
+        if author < 1:
+            raise ValueError(
+                f"Frontmatter 'author' must be a user ID "
+                f"(positive integer), got {author!r}"
+            )
+
     return (
         title or file_data.get("title"),
         file_data.get("content", ""),
         status or file_data.get("status") or "draft",
         slug or file_data.get("slug") or None,
+        author,
     )
 
 
-def publish_page(client, title, slug, status, content, admin_path="wp-admin"):
+def publish_page(
+    client, title, slug, status, content, admin_path="wp-admin", author=None
+):
     """POST a page to WordPress REST API using WPApiClient.
 
     Args:
@@ -109,6 +135,7 @@ def publish_page(client, title, slug, status, content, admin_path="wp-admin"):
         status: Publication status.
         content: HTML content.
         admin_path: WordPress admin path (default: wp-admin).
+        author: Author user ID, or None to use the authenticated user.
 
     Returns:
         0 on success, 1 on error.
@@ -120,6 +147,8 @@ def publish_page(client, title, slug, status, content, admin_path="wp-admin"):
     }
     if slug:
         payload["slug"] = slug
+    if author is not None:
+        payload["author"] = author
 
     try:
         data = client.post("pages", data=payload)
