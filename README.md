@@ -275,6 +275,32 @@ wpa option update posts_per_page 20 --site mysite
 
 Unlike `wp option`, this cannot touch arbitrary `wp_options` rows — the REST API only exposes options registered with `show_in_rest=true` (core settings like `title`, `description`, `timezone`, `posts_per_page`, plus whatever plugins register). Unknown names fail with the list of available settings.
 
+### Manage widgets
+
+Classic widgets (block themes manage widgets as blocks). Requires `edit_theme_options` capability.
+
+```bash
+# List widgets, optionally per sidebar
+wpa widget list --site mysite
+wpa widget list --site mysite --sidebar sidebar-1
+
+# Get a single widget
+wpa widget get recent-posts-3 --site mysite
+
+# Move a widget to another sidebar and/or update its settings
+wpa widget update recent-posts-3 --site mysite --sidebar sidebar-2
+wpa widget update recent-posts-3 --site mysite --instance-json '{"title": "Latest", "number": 3}'
+
+# Deactivate (move to the inactive sidebar; settings kept)
+wpa widget deactivate recent-posts-3 --site mysite
+
+# Delete — default parks it in the inactive sidebar; --force removes entirely
+wpa widget delete recent-posts-3 --site mysite
+wpa widget delete recent-posts-3 --site mysite --force
+```
+
+Creating widgets from the CLI is not supported — each widget type has its own instance schema, so there is no generic safe `widget add`. Configure new widgets in wp-admin, then manage them here.
+
 ### List sidebars
 
 ```bash
