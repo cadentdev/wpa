@@ -55,12 +55,39 @@ CI runs on ubuntu/macos/windows across Python 3.9, 3.11, 3.12, 3.13. The require
 ## Key Conventions
 
 - Python 3.9 minimum — ruff targets `py39`
-- Version string lives in `wpa/__init__.py`
+- Version string lives in `wpa/__init__.py` AND `pyproject.toml` — bump both (see Release Workflow step 10; #48 will make this single-source)
 - Branch protection on `main` — use feature branches + PRs
 - Command names follow wp-cli conventions (see design principle 4.1 in the PRD)
 - Default status for content creation is always `draft`
 - HTTPS enforced for public addresses; HTTP allowed only for private/LAN
 - Security audits: `bandit` (static analysis) and `pip-audit` (dependency vulnerabilities)
+
+## Release Workflow
+
+Every release follows this arc. Steps 1–3 are planning, 4–6 repeat per PR, 7–12 close the release.
+
+1. **Collect** — capture bug reports, feature requests, and audit findings as GitHub issues as they arise.
+2. **Select** — group issues into a release using the PRD roadmap as the guide. Apply the semver gate:
+   any compatibility break (interpreter floor, removed flag, changed default) makes it a minor release.
+3. **Plan** — organize the work into distinct, reviewable PRs (stacked if dependent). Get the plan
+   approved before implementation starts.
+4. **TDD loop (per PR)** — write failing tests for the new behavior first, implement until GREEN,
+   refactor. Coverage stays ≥98%; only thin CLI adapter functions may use `# pragma: no cover`.
+5. **CI green (per PR)** — full matrix passes, including ruff, bandit, and pip-audit.
+6. **Merge (per PR)** — merge-commit strategy (not squash). Surface discovered smells as new issues
+   rather than widening the PR.
+7. **Security audit** — human review of the full release diff (not just tool output). File findings
+   as issues; fix release-blockers now, schedule the rest.
+8. **Regression** — full suite + lint + audit tools on the final merged state.
+9. **Docs** — update README, wpa-prd.md (Current release, §6.1 implemented commands, roadmap),
+   CLAUDE.md (test count), then RELEASE-NOTES.md last, when scope is final.
+10. **Version bump** — `wpa/__init__.py` AND `pyproject.toml` (until #48 makes it single-source).
+11. **Ship** — merge the release PR, tag the merge commit `vX.Y.Z`, create the GitHub Release
+    (title `vX.Y.Z — Short Name`, body = that version's RELEASE-NOTES.md section). Trusted
+    publishing pushes to PyPI automatically.
+12. **Verify & retro** — `pip install --upgrade wpa` in a clean venv, check `wpa --version` and
+    PyPI. Hold a short retrospective; file follow-up issues. Announce (GitHub feed, LinkedIn,
+    Cadent blog — outside this repo's scope).
 
 ## Key Documents
 
