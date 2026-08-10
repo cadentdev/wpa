@@ -509,13 +509,13 @@ class TestSecurityHardening:
 
     @patch("wpa.api.requests.request")
     def test_response_size_over_cap_raises(self, mock_request, client):
-        from wpa.api import MAX_RESPONSE_BYTES
+        from wpa.api import DEFAULT_MAX_RESPONSE_BYTES
 
         resp = MagicMock()
         resp.ok = True
         resp.status_code = 200
         resp.url = "https://example.com/wp-json/wp/v2/posts"
-        resp.content = b"x" * (MAX_RESPONSE_BYTES + 1)
+        resp.content = b"x" * (DEFAULT_MAX_RESPONSE_BYTES + 1)
         mock_request.return_value = resp
 
         with pytest.raises(WPApiError) as exc_info:
@@ -527,13 +527,13 @@ class TestSecurityHardening:
 
     @patch("wpa.api.requests.request")
     def test_response_at_cap_accepted(self, mock_request, client):
-        from wpa.api import MAX_RESPONSE_BYTES
+        from wpa.api import DEFAULT_MAX_RESPONSE_BYTES
 
         resp = MagicMock()
         resp.ok = True
         resp.status_code = 200
         resp.url = "https://example.com/wp-json/wp/v2/posts"
-        resp.content = b"x" * MAX_RESPONSE_BYTES
+        resp.content = b"x" * DEFAULT_MAX_RESPONSE_BYTES
         resp.json.return_value = {"id": 1}
         mock_request.return_value = resp
 
@@ -544,7 +544,7 @@ class TestSecurityHardening:
 
     @patch("wpa.api.requests.get")
     def test_total_pages_clamped(self, mock_get, client):
-        from wpa.api import MAX_TOTAL_PAGES
+        from wpa.api import DEFAULT_MAX_TOTAL_PAGES
 
         resp = MagicMock()
         resp.ok = True
@@ -555,10 +555,10 @@ class TestSecurityHardening:
         resp.headers = {"X-WP-TotalPages": "999999"}
         mock_get.return_value = resp
 
-        # Exhaust the iterator — should stop at MAX_TOTAL_PAGES requests, not 999999.
+        # Exhaust the iterator — should stop at DEFAULT_MAX_TOTAL_PAGES requests, not 999999.
         list(client.get_list("posts"))
-        # First request + (MAX_TOTAL_PAGES - 1) more = MAX_TOTAL_PAGES total.
-        assert mock_get.call_count == MAX_TOTAL_PAGES
+        # First request + (DEFAULT_MAX_TOTAL_PAGES - 1) more = DEFAULT_MAX_TOTAL_PAGES total.
+        assert mock_get.call_count == DEFAULT_MAX_TOTAL_PAGES
 
     @patch("wpa.api.requests.get")
     def test_total_pages_bad_header_defaults_to_one(self, mock_get, client):
@@ -891,3 +891,74 @@ class TestGetTotal:
         mock_get.side_effect = requests.ConnectionError("refused")
         with pytest.raises(WPConnectionError):
             client.get_total("comments")
+
+
+class TestConfigurableCaps:
+    """Tests for env-var-configurable response/pagination caps (#37)."""
+
+    def test_response_cap_default(self):
+        from wpa.api import DEFAULT_MAX_RESPONSE_BYTES, max_response_bytes
+
+        assert max_response_bytes() == DEFAULT_MAX_RESPONSE_BYTES
+
+    def test_total_pages_default(self):
+        from wpa.api import DEFAULT_MAX_TOTAL_PAGES, max_total_pages
+
+        assert max_total_pages() == DEFAULT_MAX_TOTAL_PAGES
+
+    def test_response_cap_env_override(self, monkeypatch):
+        from wpa.api import max_response_bytes
+
+        monkeypatch.setenv("WPA_MAX_RESPONSE_BYTES", "1024")
+        assert max_response_bytes() == 1024
+
+    def test_total_pages_env_override(self, monkeypatch):
+        from wpa.api import max_total_pages
+
+        monkeypatch.setenv("WPA_MAX_TOTAL_PAGES", "5")
+        assert max_total_pages() == 5
+
+    def test_non_integer_env_falls_back_with_warning(self, monkeypatch, capsys):
+        from wpa.api import DEFAULT_MAX_RESPONSE_BYTES, max_response_bytes
+
+        monkeypatch.setenv("WPA_MAX_RESPONSE_BYTES", "lots")
+        assert max_response_bytes() == DEFAULT_MAX_RESPONSE_BYTES
+        assert "WPA_MAX_RESPONSE_BYTES" in capsys.readouterr().err
+
+    def test_non_positive_env_falls_back_with_warning(self, monkeypatch, capsys):
+        from wpa.api import DEFAULT_MAX_TOTAL_PAGES, max_total_pages
+
+        monkeypatch.setenv("WPA_MAX_TOTAL_PAGES", "0")
+        assert max_total_pages() == DEFAULT_MAX_TOTAL_PAGES
+        assert "WPA_MAX_TOTAL_PAGES" in capsys.readouterr().err
+
+    @patch("wpa.api.requests.request")
+    def test_response_cap_env_enforced(self, mock_request, client, monkeypatch):
+        monkeypatch.setenv("WPA_MAX_RESPONSE_BYTES", "10")
+
+        resp = MagicMock()
+        resp.ok = True
+        resp.status_code = 200
+        resp.url = "https://example.com/wp-json/wp/v2/posts"
+        resp.content = b"x" * 11
+        mock_request.return_value = resp
+
+        with pytest.raises(WPApiError) as exc_info:
+            client.get("posts")
+        assert exc_info.value.code == "response_too_large"
+
+    @patch("wpa.api.requests.get")
+    def test_total_pages_env_enforced(self, mock_get, client, monkeypatch):
+        monkeypatch.setenv("WPA_MAX_TOTAL_PAGES", "3")
+
+        resp = MagicMock()
+        resp.ok = True
+        resp.status_code = 200
+        resp.url = "https://example.com/wp-json/wp/v2/posts"
+        resp.content = b"[]"
+        resp.json.return_value = []
+        resp.headers = {"X-WP-TotalPages": "999999"}
+        mock_get.return_value = resp
+
+        list(client.get_list("posts"))
+        assert mock_get.call_count == 3

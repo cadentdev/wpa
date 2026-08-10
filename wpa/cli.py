@@ -57,7 +57,7 @@ from wpa.post import (
 from wpa.post import (
     validate_fields as validate_post_fields,
 )
-from wpa.publish import parse_markdown, parse_page, publish_page, resolve_file_fields
+from wpa.publish import parse_markdown, publish_page, resolve_file_fields
 from wpa.term import (
     create_term,
     delete_term,
@@ -162,12 +162,26 @@ def _format_list_output(rows, fields, args):  # pragma: no cover
 
 def _do_publish(args):  # pragma: no cover
     """Publish a markdown file as a WordPress page."""
-    title, slug, status, content = parse_page(args.file)
+    try:
+        data = parse_markdown(args.file)
+        # Frontmatter supplies author too; --author wins when both are given.
+        title, content, status, slug, author = resolve_file_fields(
+            data, author=args.author
+        )
+    except ValueError as e:
+        print(f"Error: {e}")
+        return 1
     client = WPApiClient.from_config(site_name=args.site)
 
     print(f"Publishing '{title}' as {status} to {client.site_url}...")
     return publish_page(
-        client, title, slug, status, content, admin_path=client.admin_path
+        client,
+        title,
+        slug,
+        status,
+        content,
+        admin_path=client.admin_path,
+        author=author,
     )
 
 
@@ -259,17 +273,22 @@ def _do_post_create(args):  # pragma: no cover
             tags = [int(t.strip()) for t in args.tags.split(",")]
 
         if args.file:
-            # Markdown file: frontmatter supplies title/status/slug and the
-            # body converts to HTML; explicit CLI flags win over frontmatter.
+            # Markdown file: frontmatter supplies title/status/slug/author and
+            # the body converts to HTML; explicit CLI flags win over frontmatter.
             data = parse_markdown(args.file)
-            title, content, status, slug = resolve_file_fields(
-                data, title=args.title, status=args.status, slug=args.slug
+            title, content, status, slug, author = resolve_file_fields(
+                data,
+                title=args.title,
+                status=args.status,
+                slug=args.slug,
+                author=args.author,
             )
         else:
             title = args.title
             content = args.content or ""
             status = args.status or "draft"
             slug = args.slug
+            author = args.author
 
         result = create_post(
             client,
@@ -277,7 +296,7 @@ def _do_post_create(args):  # pragma: no cover
             content=content,
             status=status,
             slug=slug,
-            author=args.author,
+            author=author,
             categories=categories,
             tags=tags,
             featured_media=args.featured_media,
@@ -404,17 +423,22 @@ def _do_page_create(args, file_path=None):  # pragma: no cover
         client = WPApiClient.from_config(site_name=args.site, debug=args.debug)
 
         if file_path:
-            # Frontmatter supplies title/status/slug and the body converts
-            # to HTML; explicit CLI flags win over frontmatter.
+            # Frontmatter supplies title/status/slug/author and the body
+            # converts to HTML; explicit CLI flags win over frontmatter.
             data = parse_markdown(file_path)
-            title, content, status, slug = resolve_file_fields(
-                data, title=args.title, status=args.status, slug=args.slug
+            title, content, status, slug, author = resolve_file_fields(
+                data,
+                title=args.title,
+                status=args.status,
+                slug=args.slug,
+                author=args.author,
             )
         else:
             title = args.title
             content = args.content or ""
             status = args.status or "draft"
             slug = args.slug
+            author = args.author
 
         result = create_page(
             client,
@@ -423,7 +447,7 @@ def _do_page_create(args, file_path=None):  # pragma: no cover
             status=status,
             slug=slug,
             parent=args.parent,
-            author=args.author,
+            author=author,
             menu_order=args.menu_order,
         )
         print("Page created successfully!")
@@ -1104,6 +1128,11 @@ def main(argv=None):
     )
     publish_parser.add_argument(
         "--site", help="Use named site config from ~/.config/wpa/<name>/"
+    )
+    publish_parser.add_argument(
+        "--author",
+        type=int,
+        help="Author user ID (overrides frontmatter 'author')",
     )
     publish_parser.set_defaults(func=_do_publish)
 

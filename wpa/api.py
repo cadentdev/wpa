@@ -1,6 +1,7 @@
 """Shared REST API client for all WPA commands."""
 
 import base64
+import os
 import re
 import sys
 
@@ -18,8 +19,43 @@ _ERROR_MESSAGES = {
 
 # Defense-in-depth caps against hostile / buggy upstream responses.
 # Tuned for "WP REST API payloads that any reasonable site produces."
-MAX_RESPONSE_BYTES = 50 * 1024 * 1024  # 50 MB — any single response
-MAX_TOTAL_PAGES = 1000  # pagination ceiling regardless of X-WP-TotalPages
+# Overridable per-environment via WPA_MAX_RESPONSE_BYTES / WPA_MAX_TOTAL_PAGES.
+DEFAULT_MAX_RESPONSE_BYTES = 50 * 1024 * 1024  # 50 MB — any single response
+DEFAULT_MAX_TOTAL_PAGES = 1000  # pagination ceiling regardless of X-WP-TotalPages
+
+
+def _env_cap(name, default):
+    """Read a positive-int cap from the environment, falling back to default.
+
+    Invalid values (non-integer, zero, negative) warn on stderr and keep the
+    default so a misconfigured environment can never disable the cap.
+    """
+    raw = os.environ.get(name)
+    if raw is None:
+        return default
+    try:
+        value = int(raw)
+    except ValueError:
+        value = 0
+    if value < 1:
+        print(
+            f"Warning: ignoring {name}={raw!r} (expected a positive integer); "
+            f"using {default}",
+            file=sys.stderr,
+        )
+        return default
+    return value
+
+
+def max_response_bytes():
+    """Response-size cap in bytes (WPA_MAX_RESPONSE_BYTES or default)."""
+    return _env_cap("WPA_MAX_RESPONSE_BYTES", DEFAULT_MAX_RESPONSE_BYTES)
+
+
+def max_total_pages():
+    """Pagination ceiling (WPA_MAX_TOTAL_PAGES or default)."""
+    return _env_cap("WPA_MAX_TOTAL_PAGES", DEFAULT_MAX_TOTAL_PAGES)
+
 
 # Endpoint path sanitizer — defense-in-depth against traversal. All legitimate
 # WP REST endpoints are ASCII slugs with optional numeric IDs and literal
@@ -194,16 +230,17 @@ class WPApiClient:
             )
 
     def _check_response_size(self, response):
-        """Raise WPApiError if the response body exceeds MAX_RESPONSE_BYTES."""
+        """Raise WPApiError if the response body exceeds the size cap."""
         # Content-Length is advisory; check actual bytes too. requests has
         # already read the body at this point (we don't use stream=True), so
         # len(response.content) is authoritative.
-        if len(response.content) > MAX_RESPONSE_BYTES:
+        cap = max_response_bytes()
+        if len(response.content) > cap:
             raise WPApiError(
                 response.status_code,
                 "response_too_large",
                 f"Response from {self.site_url} exceeded "
-                f"{MAX_RESPONSE_BYTES} bytes ({len(response.content)} bytes).",
+                f"{cap} bytes ({len(response.content)} bytes).",
             )
 
     def _check_no_scheme_downgrade(self, response):
@@ -457,14 +494,14 @@ class WPApiClient:
 
         yield from data
 
-        # Check for additional pages — clamp to MAX_TOTAL_PAGES to defend
+        # Check for additional pages — clamp to the pagination cap to defend
         # against a hostile or buggy server that returns an absurd
         # X-WP-TotalPages value (e.g., 999999) and forces an infinite loop.
         try:
             total_pages = int(response.headers.get("X-WP-TotalPages", 1))
         except (TypeError, ValueError):
             total_pages = 1
-        total_pages = min(total_pages, MAX_TOTAL_PAGES)
+        total_pages = min(total_pages, max_total_pages())
 
         for page_num in range(2, total_pages + 1):
             page_params = {**params, "page": page_num}
