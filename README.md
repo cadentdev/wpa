@@ -339,6 +339,51 @@ wpa term delete 7 --site mysite --taxonomy category
 
 **Note on `delete`:** The WordPress REST API does not support trashing taxonomy terms, so `wpa term delete` (and the `category` / `tag` aliases) always performs a permanent delete. There is no `--force` flag — force is implicit.
 
+### Inspect site structure (taxonomies, post types, blocks)
+
+```bash
+# Which taxonomies does this site register? (shows what --taxonomy accepts)
+wpa taxonomy list --site mysite
+wpa taxonomy get category --site mysite
+
+# Registered post types
+wpa post-type list --site mysite
+wpa post-type get post --site mysite --format json
+
+# Registered block types (sites register hundreds; scope with --namespace)
+wpa block list --site mysite --namespace core
+wpa block get core/paragraph --site mysite
+```
+
+All read-only.
+
+### Discover a site's REST API surface
+
+```bash
+# Which API namespaces does the site expose? (core, plugins, ...)
+wpa api discover --site mysite
+
+# Every route with its methods, optionally scoped to a namespace
+wpa api discover --site mysite --routes
+wpa api discover --site mysite --routes --namespace wp/v2
+```
+
+Useful for diagnosing what a site actually supports — disabled endpoints,
+WAF filtering, and plugin APIs all show up here.
+
+### View themes
+
+```bash
+# List installed themes (listing all requires switch_themes capability)
+wpa theme list --site mysite
+wpa theme list --site mysite --status active
+
+# Get one theme by stylesheet
+wpa theme get twentytwentyfive --site mysite
+```
+
+Read-only — the REST API does not expose theme activation or installation.
+
 ### Output options
 
 All list commands support these output modifiers:

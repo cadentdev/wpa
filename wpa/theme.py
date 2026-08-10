@@ -73,7 +73,7 @@ def _theme_endpoint(stylesheet):
     via build_endpoint.
     """
     parts = stylesheet.split("/") if stylesheet else []
-    if not parts or not all(parts):
+    if not parts or len(parts) > 2 or not all(parts):
         raise ValueError(f"Invalid theme stylesheet: {stylesheet!r}")
     try:
         return build_endpoint("themes", *parts)
