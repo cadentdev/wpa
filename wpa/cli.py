@@ -47,6 +47,15 @@ from wpa.page import (
 from wpa.page import (
     validate_fields as validate_page_fields,
 )
+from wpa.plugin import (
+    activate_plugin,
+    deactivate_plugin,
+    get_plugin,
+    list_plugins,
+)
+from wpa.plugin import (
+    validate_fields as validate_plugin_fields,
+)
 from wpa.post import (
     create_post,
     delete_post,
@@ -776,6 +785,67 @@ def _do_media_delete(args):  # pragma: no cover
 # --- Comment handlers ---
 
 
+def _do_plugin_list(args):  # pragma: no cover
+    """List installed WordPress plugins."""
+    try:
+        client = WPApiClient.from_config(site_name=args.site, debug=args.debug)
+        fields = validate_plugin_fields(args.fields)
+        rows = list_plugins(client, status=args.status, search=args.search)
+        return _format_list_output(rows, fields, args)
+    except ValueError as e:
+        print(f"Error: {e}")
+        return 1
+    except (WPApiError, WPConnectionError, WPTimeoutError) as e:
+        return _handle_api_error(e)
+
+
+def _do_plugin_get(args):  # pragma: no cover
+    """Get a single installed plugin."""
+    try:
+        client = WPApiClient.from_config(site_name=args.site, debug=args.debug)
+        row = get_plugin(client, args.plugin)
+        if args.format == "json":
+            print(json.dumps(row, indent=2, ensure_ascii=False))
+        else:
+            for key, value in row.items():
+                print(f"{key}: {value}")
+        return 0
+    except ValueError as e:
+        print(f"Error: {e}")
+        return 1
+    except (WPApiError, WPConnectionError, WPTimeoutError) as e:
+        return _handle_api_error(e)
+
+
+def _do_plugin_toggle(action_func, action_label):  # pragma: no cover
+    """Build an activate/deactivate handler that prints the new status."""
+
+    def handler(args):
+        try:
+            client = WPApiClient.from_config(site_name=args.site, debug=args.debug)
+            result = action_func(client, args.plugin)
+            print(
+                f"Plugin {result.get('plugin', args.plugin)} {action_label} "
+                f"(status: {result.get('status', '')})."
+            )
+            return 0
+        except ValueError as e:
+            print(f"Error: {e}")
+            return 1
+        except (WPApiError, WPConnectionError, WPTimeoutError) as e:
+            return _handle_api_error(e)
+
+    return handler
+
+
+def _do_plugin_activate(args):  # pragma: no cover
+    return _do_plugin_toggle(activate_plugin, "activated")(args)
+
+
+def _do_plugin_deactivate(args):  # pragma: no cover
+    return _do_plugin_toggle(deactivate_plugin, "deactivated")(args)
+
+
 def _do_comment_list(args):  # pragma: no cover
     """List WordPress comments."""
     try:
@@ -1502,6 +1572,54 @@ def main(argv=None):
         help="Permanently delete (skip trash)",
     )
     media_delete_parser.set_defaults(func=_do_media_delete)
+
+    # --- wpa plugin ---
+    plugin_parser = subparsers.add_parser(
+        "plugin",
+        help="Plugin management commands (requires activate_plugins capability)",
+    )
+    plugin_subparsers = plugin_parser.add_subparsers(dest="plugin_command")
+
+    # wpa plugin list
+    plugin_list_parser = plugin_subparsers.add_parser(
+        "list", parents=[shared, list_p], help="List installed plugins"
+    )
+    plugin_list_parser.add_argument(
+        "--status",
+        choices=["active", "inactive", "all"],
+        default="all",
+        help="Filter by activation status (default: all)",
+    )
+    plugin_list_parser.add_argument("--search", help="Search installed plugins")
+    plugin_list_parser.set_defaults(func=_do_plugin_list)
+
+    # wpa plugin get <plugin>
+    plugin_get_parser = plugin_subparsers.add_parser(
+        "get", parents=[shared], help="Get a single installed plugin"
+    )
+    plugin_get_parser.add_argument(
+        "plugin", help="Plugin identifier (e.g. akismet/akismet)"
+    )
+    plugin_get_parser.add_argument(
+        "--format",
+        default="table",
+        choices=["table", "json"],
+        help="Output format (default: table)",
+    )
+    plugin_get_parser.set_defaults(func=_do_plugin_get)
+
+    # wpa plugin activate/deactivate <plugin>
+    for action_name, action_func, help_text in (
+        ("activate", _do_plugin_activate, "Activate an installed plugin"),
+        ("deactivate", _do_plugin_deactivate, "Deactivate an installed plugin"),
+    ):
+        action_parser = plugin_subparsers.add_parser(
+            action_name, parents=[shared], help=help_text
+        )
+        action_parser.add_argument(
+            "plugin", help="Plugin identifier (e.g. akismet/akismet)"
+        )
+        action_parser.set_defaults(func=action_func)
 
     # --- wpa comment ---
     comment_parser = subparsers.add_parser(

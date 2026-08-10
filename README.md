@@ -204,6 +204,26 @@ wpa comment delete 123 --site mysite
 wpa comment delete 123 --site mysite --force
 ```
 
+### Manage plugins
+
+Requires an account with the `activate_plugins` capability (administrator on most installs).
+
+```bash
+# List installed plugins (all statuses by default)
+wpa plugin list --site mysite
+wpa plugin list --site mysite --status active
+wpa plugin list --site mysite --search "cache" --format json
+
+# Get a single plugin (folder/file identifier; .php suffix accepted)
+wpa plugin get akismet/akismet --site mysite
+
+# Activate / deactivate
+wpa plugin activate akismet/akismet --site mysite
+wpa plugin deactivate akismet/akismet --site mysite
+```
+
+Installing, updating, and deleting plugins are not supported yet — install/delete are planned (see issue #41's follow-ups); updating to a newer version is a REST API limitation, so use wp-admin or wp-cli for that.
+
 ### Manage taxonomy terms (categories, tags, custom)
 
 ```bash
