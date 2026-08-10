@@ -706,7 +706,50 @@ wpa term delete "${TAG2_ID}" --site "${SITE}" --taxonomy post_tag
 echo
 
 # =============================================================================
-# 7. SUMMARY
+# 7. PLUGINS  (v0.10.0)
+# =============================================================================
+# Exercises the following wpa subcommands:
+#
+#   - wpa plugin list        (NEW in v0.10.0 — with --status filter)
+#   - wpa plugin get         (NEW in v0.10.0)
+#   - wpa plugin deactivate  (NEW in v0.10.0)
+#   - wpa plugin activate    (NEW in v0.10.0)
+#
+# The round-trip (list → deactivate → activate → confirm) is idempotent:
+# it targets a plugin that is known-installed and known-active on the
+# rollback baseline, and ends with the plugin active again. Requires the
+# authenticated user to have the activate_plugins capability (admin).
+#
+# SMOKE_PLUGIN defaults to Akismet, which ships with stock WordPress.
+# Override for targets with a different baseline:
+#   SMOKE_PLUGIN="wordfence/wordfence" ./bootstrap-site.sh ...
+SMOKE_PLUGIN="${SMOKE_PLUGIN:-akismet/akismet}"
+
+echo "=== 7. Plugins ==="
+echo
+
+echo "Listing installed plugins..."
+wpa plugin list --site "${SITE}"
+echo
+
+echo "Fetching plugin ${SMOKE_PLUGIN}..."
+wpa plugin get "${SMOKE_PLUGIN}" --site "${SITE}"
+echo
+
+echo "Deactivating ${SMOKE_PLUGIN}..."
+wpa plugin deactivate "${SMOKE_PLUGIN}" --site "${SITE}"
+echo
+
+echo "Re-activating ${SMOKE_PLUGIN}..."
+wpa plugin activate "${SMOKE_PLUGIN}" --site "${SITE}"
+echo
+
+echo "Confirming via active-only listing (should include ${SMOKE_PLUGIN})..."
+wpa plugin list --site "${SITE}" --status active
+echo
+
+# =============================================================================
+# 8. SUMMARY
 # =============================================================================
 
 echo "============================================================"
