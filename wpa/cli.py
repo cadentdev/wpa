@@ -37,6 +37,14 @@ from wpa.media import (
 from wpa.media import (
     validate_fields as validate_media_fields,
 )
+from wpa.option import (
+    get_setting,
+    list_settings,
+    update_setting,
+)
+from wpa.option import (
+    validate_fields as validate_option_fields,
+)
 from wpa.page import (
     create_page,
     delete_page,
@@ -67,6 +75,12 @@ from wpa.post import (
     validate_fields as validate_post_fields,
 )
 from wpa.publish import parse_markdown, publish_page, resolve_file_fields
+from wpa.sidebar import (
+    list_sidebars,
+)
+from wpa.sidebar import (
+    validate_fields as validate_sidebar_fields,
+)
 from wpa.term import (
     create_term,
     delete_term,
@@ -846,6 +860,72 @@ def _do_plugin_deactivate(args):  # pragma: no cover
     return _do_plugin_toggle(deactivate_plugin, "deactivated")(args)
 
 
+def _do_option_list(args):  # pragma: no cover
+    """List registered site settings."""
+    try:
+        client = WPApiClient.from_config(site_name=args.site, debug=args.debug)
+        fields = validate_option_fields(args.fields)
+        rows = list_settings(client)
+        return _format_list_output(rows, fields, args)
+    except ValueError as e:
+        print(f"Error: {e}")
+        return 1
+    except (WPApiError, WPConnectionError, WPTimeoutError) as e:
+        return _handle_api_error(e)
+
+
+def _do_option_get(args):  # pragma: no cover
+    """Get a single registered setting's value."""
+    try:
+        client = WPApiClient.from_config(site_name=args.site, debug=args.debug)
+        value = get_setting(client, args.name)
+        if args.format == "json":
+            print(json.dumps(value, indent=2, ensure_ascii=False))
+        else:
+            print(value)
+        return 0
+    except ValueError as e:
+        print(f"Error: {e}")
+        return 1
+    except (WPApiError, WPConnectionError, WPTimeoutError) as e:
+        return _handle_api_error(e)
+
+
+def _do_option_update(args):  # pragma: no cover
+    """Update a single registered setting."""
+    try:
+        client = WPApiClient.from_config(site_name=args.site, debug=args.debug)
+        new_value = update_setting(client, args.name, args.value)
+        print(f"Setting '{args.name}' updated.")
+        print(f"  New value: {new_value!r}")
+        return 0
+    except ValueError as e:
+        print(f"Error: {e}")
+        return 1
+    except (WPApiError, WPConnectionError, WPTimeoutError) as e:
+        return _handle_api_error(e)
+
+
+def _do_sidebar_list(args):  # pragma: no cover
+    """List registered sidebars."""
+    try:
+        client = WPApiClient.from_config(site_name=args.site, debug=args.debug)
+        fields = validate_sidebar_fields(args.fields)
+        rows = list_sidebars(client)
+        if not rows and not (args.ids or args.count or args.field):
+            print(
+                "No sidebars found. Block themes register no classic "
+                "sidebars; this is expected on a block theme."
+            )
+            return 0
+        return _format_list_output(rows, fields, args)
+    except ValueError as e:
+        print(f"Error: {e}")
+        return 1
+    except (WPApiError, WPConnectionError, WPTimeoutError) as e:
+        return _handle_api_error(e)
+
+
 def _do_comment_list(args):  # pragma: no cover
     """List WordPress comments."""
     try:
@@ -1620,6 +1700,57 @@ def main(argv=None):
             "plugin", help="Plugin identifier (e.g. akismet/akismet)"
         )
         action_parser.set_defaults(func=action_func)
+
+    # --- wpa option ---
+    option_parser = subparsers.add_parser(
+        "option",
+        help="Site settings commands (registered settings only; "
+        "requires manage_options capability)",
+    )
+    option_subparsers = option_parser.add_subparsers(dest="option_command")
+
+    # wpa option list
+    option_list_parser = option_subparsers.add_parser(
+        "list", parents=[shared, list_p], help="List registered settings"
+    )
+    option_list_parser.set_defaults(func=_do_option_list)
+
+    # wpa option get <name>
+    option_get_parser = option_subparsers.add_parser(
+        "get", parents=[shared], help="Get a single setting's value"
+    )
+    option_get_parser.add_argument("name", help="Setting name (e.g. title)")
+    option_get_parser.add_argument(
+        "--format",
+        default="table",
+        choices=["table", "json"],
+        help="Output format (default: bare value; json for typed output)",
+    )
+    option_get_parser.set_defaults(func=_do_option_get)
+
+    # wpa option update <name> <value>
+    option_update_parser = option_subparsers.add_parser(
+        "update", parents=[shared], help="Update a single setting"
+    )
+    option_update_parser.add_argument("name", help="Setting name (e.g. title)")
+    option_update_parser.add_argument(
+        "value",
+        help="New value (JSON-parsed when possible: numbers, true/false, null)",
+    )
+    option_update_parser.set_defaults(func=_do_option_update)
+
+    # --- wpa sidebar ---
+    sidebar_parser = subparsers.add_parser(
+        "sidebar",
+        help="Sidebar commands (requires edit_theme_options capability)",
+    )
+    sidebar_subparsers = sidebar_parser.add_subparsers(dest="sidebar_command")
+
+    # wpa sidebar list
+    sidebar_list_parser = sidebar_subparsers.add_parser(
+        "list", parents=[shared, list_p], help="List registered sidebars"
+    )
+    sidebar_list_parser.set_defaults(func=_do_sidebar_list)
 
     # --- wpa comment ---
     comment_parser = subparsers.add_parser(

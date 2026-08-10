@@ -224,6 +224,37 @@ wpa plugin deactivate akismet/akismet --site mysite
 
 Installing, updating, and deleting plugins are not supported yet — install/delete are planned (see issue #41's follow-ups); updating to a newer version is a REST API limitation, so use wp-admin or wp-cli for that.
 
+### Manage site settings
+
+Requires an account with the `manage_options` capability (administrator).
+
+```bash
+# List all registered settings
+wpa option list --site mysite
+wpa option list --site mysite --format json
+
+# Get a single value (bare output for scripting; --format json for typed)
+wpa option get title --site mysite
+wpa option get posts_per_page --site mysite --format json
+
+# Update a setting. Values are JSON-parsed when possible, so numbers and
+# booleans round-trip typed; anything else is treated as a string.
+wpa option update title "My Renamed Site" --site mysite
+wpa option update posts_per_page 20 --site mysite
+```
+
+Unlike `wp option`, this cannot touch arbitrary `wp_options` rows — the REST API only exposes options registered with `show_in_rest=true` (core settings like `title`, `description`, `timezone`, `posts_per_page`, plus whatever plugins register). Unknown names fail with the list of available settings.
+
+### List sidebars
+
+```bash
+# List registered sidebars (classic themes; block themes report none)
+wpa sidebar list --site mysite
+wpa sidebar list --site mysite --format json --fields id,name,status
+```
+
+Requires `edit_theme_options` capability. Read-only.
+
 ### Manage taxonomy terms (categories, tags, custom)
 
 ```bash
