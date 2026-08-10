@@ -70,13 +70,18 @@ CI runs on ubuntu/macos/windows across Python 3.10, 3.11, 3.12, 3.13, plus a wee
 
 ## Release Workflow
 
-Every release follows this arc. Steps 1–3 are planning, 4–6 repeat per PR, 7–12 close the release.
+Every release follows this arc. Steps 1–3 are planning, 4–6 repeat per PR, 7–13 close the release.
 
 1. **Collect** — capture bug reports, feature requests, and audit findings as GitHub issues as they arise.
-2. **Select** — group issues into a release using the PRD roadmap as the guide. Apply the semver gate:
-   any compatibility break (interpreter floor, removed flag, changed default) makes it a minor release.
-3. **Plan** — organize the work into distinct, reviewable PRs (stacked if dependent). Get the plan
-   approved before implementation starts.
+2. **Select** — group issues into a release using the PRD roadmap as the guide. Create a GitHub
+   milestone `vX.Y.Z` and attach the selected issues, so release scope is visible on GitHub and the
+   retro can check shipped-vs-selected from the record. Apply the semver gate: any compatibility
+   break (interpreter floor, removed flag, changed default) makes it a minor release.
+3. **Plan** — organize the work into distinct, reviewable PRs. Prefer independent PRs merged in
+   sequence over stacked PRs — stacked PRs get no CI until rebased onto main, so a stack flies
+   blind until its base merges. Size gate: if a release exceeds ~4 feature PRs, consider splitting
+   it into two releases — audit quality dilutes with diff size, and security-sensitive work
+   deserves undivided audit attention. Get the plan approved before implementation starts.
 4. **TDD loop (per PR)** — write failing tests for the new behavior first, implement until GREEN,
    refactor. Coverage stays ≥98%; only thin CLI adapter functions may use `# pragma: no cover`.
 5. **CI green (per PR)** — full matrix passes, including ruff, bandit, and pip-audit. Timing notes:
@@ -85,9 +90,14 @@ Every release follows this arc. Steps 1–3 are planning, 4–6 repeat per PR, 7
    merges; ci.yml only triggers on PRs targeting main.
 6. **Merge (per PR)** — merge-commit strategy (not squash). Surface discovered smells as new issues
    rather than widening the PR.
-7. **Security audit** — human review of the full release diff (not just tool output). File findings
-   as issues; fix release-blockers now, schedule the rest.
-8. **Regression** — full suite + lint + audit tools on the final merged state.
+7. **Security audit** — human review of the full release diff (not just tool output), through three
+   lenses: (a) round-trip symmetry — everything writable must be readable (a `get` that hides what
+   `update` replaces is a bug); (b) input-type validation wherever user-supplied data crosses a
+   type boundary (YAML/JSON → API payload); (c) the classic pass — injection, authz, secrets,
+   error-message leakage. File findings as issues; fix release-blockers now, schedule the rest.
+8. **Regression** — full suite + lint + audit tools on the final merged state. When the release
+   touches the request path and a staging site is available, also run
+   `examples/bootstrap-site.sh` against it as a live smoke test.
 9. **Docs** — update README, wpa-prd.md (Current release, §6.1 implemented commands, roadmap),
    CLAUDE.md (test count), then RELEASE-NOTES.md last, when scope is final.
 10. **Version bump** — `wpa/__init__.py` (single source; `pyproject.toml` reads it dynamically).
@@ -95,8 +105,14 @@ Every release follows this arc. Steps 1–3 are planning, 4–6 repeat per PR, 7
     (title `vX.Y.Z — Short Name`, body = that version's RELEASE-NOTES.md section). Trusted
     publishing pushes to PyPI automatically.
 12. **Verify & retro** — `pip install --upgrade wpa` in a clean venv, check `wpa --version` and
-    PyPI. Hold a short retrospective; file follow-up issues. Announce (GitHub feed, LinkedIn,
-    Cadent blog — outside this repo's scope).
+    PyPI. Gotchas: installing seconds after publish can fail on CDN propagation — retry after
+    ~1 min before diagnosing; and verify from a neutral cwd, since importing `wpa` from the repo
+    root picks up the local package and masks a failed install. Hold a short retrospective; file
+    follow-up issues. Close the milestone. Announce (GitHub feed, LinkedIn, Cadent blog — outside
+    this repo's scope).
+13. **Workflow review** — retro the workflow itself, not just the release: which steps produced
+    value, which were friction, what got discovered ad hoc that a step should have caught? Apply
+    accepted improvements to this section before starting the next release.
 
 ## Key Documents
 
