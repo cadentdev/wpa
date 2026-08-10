@@ -101,8 +101,10 @@ def resolve_file_fields(file_data, title=None, status=None, slug=None, author=No
     if author is None:
         author = file_data.get("author")
     if author is not None:
+        # Coerce via str so YAML booleans ("True") and floats ("1.9") are
+        # rejected instead of silently becoming user ID 1 via int().
         try:
-            author = int(author)
+            author = int(str(author))
         except (TypeError, ValueError):
             raise ValueError(
                 f"Frontmatter 'author' must be a user ID "

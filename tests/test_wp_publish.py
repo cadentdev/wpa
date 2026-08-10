@@ -1185,3 +1185,15 @@ class TestResolveFileFields:
         data = {**self._file_data(), "author": 0}
         with pytest.raises(ValueError, match="author"):
             resolve_file_fields(data)
+
+    def test_author_bool_raises(self):
+        # YAML `author: true` must not silently become user ID 1
+        data = {**self._file_data(), "author": True}
+        with pytest.raises(ValueError, match="author"):
+            resolve_file_fields(data)
+
+    def test_author_float_raises(self):
+        # YAML `author: 1.9` must not silently truncate to user ID 1
+        data = {**self._file_data(), "author": 1.9}
+        with pytest.raises(ValueError, match="author"):
+            resolve_file_fields(data)
