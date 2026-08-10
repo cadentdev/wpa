@@ -19,12 +19,15 @@ from wpa.api import build_endpoint
 INACTIVE_SIDEBAR = "wp_inactive_widgets"
 
 # Maps friendly field names to WordPress REST API response keys.
-# `status` is synthesized from the sidebar (the API has no status field).
+# `status` is synthesized from the sidebar (the API has no status field);
+# `instance` is flattened to its raw settings dict so `widget get` shows
+# the current config that `update --instance-json` would replace.
 WIDGET_FIELDS = {
     "id": "id",
     "id_base": "id_base",
     "sidebar": "sidebar",
     "status": None,
+    "instance": "instance",
 }
 
 AVAILABLE_FIELDS = list(WIDGET_FIELDS.keys())
@@ -75,8 +78,11 @@ def _extract_widget_row(api_widget):
     for friendly, api_key in WIDGET_FIELDS.items():
         if friendly == "status":
             row[friendly] = "inactive" if sidebar == INACTIVE_SIDEBAR else "active"
-        else:
-            row[friendly] = api_widget.get(api_key, "")
+            continue
+        value = api_widget.get(api_key, "")
+        if friendly == "instance" and isinstance(value, dict):
+            value = value.get("raw", "")
+        row[friendly] = value
     return row
 
 

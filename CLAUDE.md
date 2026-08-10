@@ -32,7 +32,7 @@ CI runs on ubuntu/macos/windows across Python 3.10, 3.11, 3.12, 3.13, plus a wee
 
 ## Architecture
 
-**Entry point**: `wpa/cli.py` — argparse-based CLI with subcommands (`publish`, `post list/get/create/update/delete`, `page list/get/create/update/delete`, `site add/list`, `user list/get/create/update/delete/set-role`, `media list/get/import/delete`, `comment list/get/create/update/delete/approve/unapprove/spam/unspam/trash/count`, `term list/get/create/update/delete`, plus `category` and `tag` aliases).
+**Entry point**: `wpa/cli.py` — argparse-based CLI with subcommands (`publish`, `post list/get/create/update/delete`, `page list/get/create/update/delete`, `site add/list`, `user list/get/create/update/delete/set-role`, `media list/get/import/delete`, `comment list/get/create/update/delete/approve/unapprove/spam/unspam/trash/count`, `term list/get/create/update/delete` plus `category`/`tag` aliases, `plugin list/get/activate/deactivate`, `menu list/get/create/delete` with `item` and `location` sub-groups, `widget list/get/update/deactivate/delete`, `option list/get/update`, `sidebar list`).
 
 **Modules**:
 - `cli.py` — Command parsing, dispatches to other modules
@@ -46,11 +46,16 @@ CI runs on ubuntu/macos/windows across Python 3.10, 3.11, 3.12, 3.13, plus a wee
 - `media.py` — Media CRUD operations against `/wp-json/wp/v2/media`. Uses `WPApiClient` for all requests. Supports `list` (with `--media-type`/`--mime-type` filters), `get`, `import` (multipart upload from a local file with optional title/alt-text/caption/description/post), and `delete` (trash-aware, `--force` to permanently delete)
 - `comment.py` — Comment CRUD and moderation against `/wp-json/wp/v2/comments`. Supports `list` (filter by post, status, parent, author email, search), `get`, `create`, `update`, `delete` (trash-aware, `--force` to permanently delete), plus moderation shortcuts `approve`, `unapprove`, `spam`, `unspam`, `trash`, and `count` (per-status totals via the `X-WP-Total` header)
 - `term.py` — Taxonomy term CRUD against `/wp-json/wp/v2/{categories,tags,<custom>}`. One module handles built-in taxonomies (`category` → `categories`, `post_tag` → `tags`) and custom taxonomies (passed through by slug). The CLI exposes `wpa term --taxonomy <slug>` plus thin `wpa category` / `wpa tag` aliases that pre-set the taxonomy. Term `delete` is always permanent (the REST API does not support trashing terms).
+- `plugin.py` — Plugin management against `/wp-json/wp/v2/plugins`. `list` (`--status`/`--search`; the collection is not paginated), `get`, `activate`, `deactivate`. Identifiers accept `folder/file`, `folder/file.php`, or bare slugs; segments validated via `build_endpoint`. Install/delete deliberately unimplemented (#41 follow-ups)
+- `menu.py` — Nav menu management against `/wp-json/wp/v2/{menus,menu-items,menu-locations}` (classic menus). Menu CRUD (delete force-only), item CRUD (`add` infers `custom`/`post_type`/`taxonomy` type from flags), read-only location listing. Menu items publish immediately (structure, not content)
+- `widget.py` — Classic widget management against `/wp-json/wp/v2/widgets`. `list`/`get` (status synthesized from sidebar; `get` flattens instance settings), `update` (move and/or `--instance-json`), `deactivate` (move to `wp_inactive_widgets`), `delete` (default parks inactive, `--force` removes). No `widget add` — per-type instance schemas
+- `option.py` — Registered-settings management against `/wp-json/wp/v2/settings` (single object, not a collection). `list`/`get`/`update` with JSON-typed value parsing; existence-checked before writes so unknown names get the `show_in_rest` explanation
+- `sidebar.py` — Read-only sidebar listing against `/wp-json/wp/v2/sidebars`
 - `formatter.py` — Shared output formatting (table, json, csv, tsv) with column selection via `--fields`, plus `--ids`, `--count`, `--field` output modifiers
 
 **Global flags**: `--debug` (HTTP request/response details) available on all commands. `--site` selects a named site config.
 
-**Tests**: All in `tests/` (520 tests), use `unittest.mock` to mock HTTP requests. No live WordPress connection needed.
+**Tests**: All in `tests/` (626 tests), use `unittest.mock` to mock HTTP requests. No live WordPress connection needed.
 
 ## Key Conventions
 

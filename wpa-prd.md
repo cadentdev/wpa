@@ -1,10 +1,10 @@
 # WPA — Product Requirements Document
 
 **Product:** WPA (WordPress Automation)
-**Version:** PRD v1.3
+**Version:** PRD v1.4
 **Date:** 2026-08-09
 **Author:** Neil Johnson, Cadent Creative
-**Current release:** v0.9.0
+**Current release:** v0.10.0
 **Repository:** [github.com/cadentdev/wpa](https://github.com/cadentdev/wpa)
 **PyPI:** [pypi.org/project/wpa](https://pypi.org/project/wpa/)
 **License:** MIT
@@ -158,10 +158,11 @@ wpa/
 ├── comment.py      # Comment subcommand handlers
 ├── media.py        # Media subcommand handlers
 ├── term.py         # Term/taxonomy subcommand handlers
-├── plugin.py       # Plugin subcommand handlers      (planned, Phase 6)
-├── menu.py         # Menu subcommand handlers        (planned, Phase 6)
-├── widget.py       # Widget subcommand handlers      (planned, Phase 6)
-├── option.py       # Settings/option subcommand handlers (planned, Phase 6)
+├── plugin.py       # Plugin subcommand handlers
+├── menu.py         # Menu subcommand handlers
+├── widget.py       # Widget subcommand handlers
+├── option.py       # Settings/option subcommand handlers
+├── sidebar.py      # Sidebar subcommand handlers
 ├── formatter.py    # Output formatting (table, JSON, CSV, TSV)
 └── __init__.py     # Package version (single source, read by pyproject)
 ```
@@ -232,7 +233,7 @@ These are the quality bars every release meets (folded in from the retired devel
 
 ## 6. Command structure
 
-### 6.1 Implemented commands (v0.9.0)
+### 6.1 Implemented commands (v0.10.0)
 
 **Content publishing**
 
@@ -301,6 +302,45 @@ These are the quality bars every release meets (folded in from the retired devel
 | `wpa category …` | Alias for `wpa term --taxonomy category` |
 | `wpa tag …` | Alias for `wpa term --taxonomy post_tag` |
 
+**Plugins** (Tier 3, shipped v0.10.0)
+
+| Command | Description |
+|---|---|
+| `wpa plugin list` | List installed plugins with `--status active/inactive/all`, `--search`. Not paginated — the REST plugins collection returns everything |
+| `wpa plugin get <id>` | Get a single plugin (`folder/file`, `folder/file.php`, or bare slug identifiers) |
+| `wpa plugin activate/deactivate <id>` | Toggle activation status. Requires `activate_plugins` capability. Install/delete deferred (see #41 follow-ups) |
+
+**Nav menus** (Tier 3, shipped v0.10.0; requires `edit_theme_options`)
+
+| Command | Description |
+|---|---|
+| `wpa menu list/get/create/delete` | Menu CRUD. Delete is always permanent and removes the menu's items |
+| `wpa menu item list/add/update/delete` | Item management. `add` supports custom links (`--title --url`) and object links (`--object --object-id`, type inferred) |
+| `wpa menu location list` | Read-only location listing; assignment is theme-dependent and not exposed by the REST API |
+
+**Widgets** (Tier 3, shipped v0.10.0; requires `edit_theme_options`)
+
+| Command | Description |
+|---|---|
+| `wpa widget list/get` | Classic widgets with synthesized active/inactive status; `get` includes instance settings |
+| `wpa widget update <id>` | Move between sidebars (`--sidebar`) and/or replace settings (`--instance-json`) |
+| `wpa widget deactivate <id>` | Move to the inactive sidebar, settings kept |
+| `wpa widget delete <id>` | Default parks in the inactive sidebar; `--force` removes entirely. `widget add` deliberately unsupported (per-type instance schemas) |
+
+**Site settings** (Tier 3, shipped v0.10.0; requires `manage_options`)
+
+| Command | Description |
+|---|---|
+| `wpa option list` | All registered (`show_in_rest`) settings as name/value rows |
+| `wpa option get <name>` | Single value; bare output for scripting, `--format json` for typed |
+| `wpa option update <name> <value>` | Values JSON-parsed when possible so numbers/booleans round-trip typed |
+
+**Sidebars** (Tier 3, shipped v0.10.0)
+
+| Command | Description |
+|---|---|
+| `wpa sidebar list` | Read-only listing of registered sidebars |
+
 **Site configuration**
 
 | Command | Description |
@@ -317,17 +357,7 @@ These are the quality bars every release meets (folded in from the retired devel
 
 ### 6.2 Planned command groups
 
-Based on the REST API mapping matrix, the following command groups are implementable and prioritized by value. (Tiers 1 and 2 — posts, pages, users, media, comments, and terms — shipped in v0.6.0–v0.8.0 and are documented in §6.1.)
-
-**Tier 3 — Site configuration and structure**
-
-| Command Group | Key Subcommands | REST API Endpoint |
-|---|---|---|
-| `wpa plugin` | `list`, `get`, `install`, `activate`, `deactivate`, `delete` | `/wp/v2/plugins` |
-| `wpa menu` | `list`, `create`, `delete`, plus `item` subgroup | `/wp/v2/menus`, `/wp/v2/menu-items` |
-| `wpa widget` | `list`, `add`, `update`, `delete`, `deactivate` | `/wp/v2/widgets` |
-| `wpa option` | `get`, `update`, `list` (registered settings only) | `/wp/v2/settings` |
-| `wpa sidebar` | `list` | `/wp/v2/sidebars` |
+Based on the REST API mapping matrix, the following command groups are implementable and prioritized by value. (Tiers 1–3 — posts, pages, users, media, comments, terms, plugins, menus, widgets, settings, and sidebars — shipped in v0.6.0–v0.10.0 and are documented in §6.1. Plugin `install`/`delete` remain open as #41 follow-ups.)
 
 **Tier 4 — Introspection and discovery**
 
@@ -437,15 +467,17 @@ Shipped in v0.8.0 (2026-04-15). See `RELEASE-NOTES.md` for full notes including 
 | Env-configurable safety caps (`WPA_MAX_RESPONSE_BYTES`, `WPA_MAX_TOTAL_PAGES`) | Shipped v0.9.0 |
 | Docs current: PRD refresh, README positioning, recommendations doc folded in and archived | Shipped v0.9.0 |
 
-### Phase 6: Plugins, menus, and widgets (v0.10.0)
+### Phase 6: Plugins, menus, and widgets (v0.10.0) — COMPLETE
 
-| Deliverable | Details |
+**Shipped:** v0.10.0, 2026-08-09.
+
+| Deliverable | Status |
 |---|---|
-| `wpa plugin` subcommands | `list`, `get`, `install`, `activate`, `deactivate`, `delete`, `search` |
-| `wpa menu` subcommands | `list`, `create`, `delete` plus `item` sub-group |
-| `wpa widget` subcommands | `list`, `add`, `update`, `delete`, `deactivate` |
-| `wpa sidebar list` | List registered sidebars |
-| `wpa option` subcommands | `get`, `update`, `list` for registered settings |
+| `wpa plugin list/get/activate/deactivate` | Shipped v0.10.0 (`install`/`delete` deferred per #41; `search` descoped — it queries WordPress.org, not the site) |
+| `wpa menu list/get/create/delete` + `item` sub-group + `location list` | Shipped v0.10.0 |
+| `wpa widget list/get/update/delete/deactivate` | Shipped v0.10.0 (`add` descoped: per-type instance schemas make a generic create guesswork) |
+| `wpa sidebar list` | Shipped v0.10.0 |
+| `wpa option get/update/list` | Shipped v0.10.0 |
 
 ### Phase 7: Introspection and discovery (v0.11.0)
 
