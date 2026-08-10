@@ -962,3 +962,57 @@ class TestConfigurableCaps:
 
         list(client.get_list("posts"))
         assert mock_get.call_count == 3
+
+
+class TestGetRoot:
+    @patch("wpa.api.requests.request")
+    def test_get_root_url(self, mock_request, client):
+        resp = MagicMock()
+        resp.ok = True
+        resp.content = b'{"namespaces": ["wp/v2"]}'
+        resp.json.return_value = {"namespaces": ["wp/v2"]}
+        mock_request.return_value = resp
+
+        result = client.get_root()
+        assert result == {"namespaces": ["wp/v2"]}
+        args, _kwargs = mock_request.call_args
+        assert args == ("GET", "https://example.com/wp-json/")
+
+    @patch("wpa.api.requests.request")
+    def test_get_root_passes_params(self, mock_request, client):
+        resp = MagicMock()
+        resp.ok = True
+        resp.content = b"{}"
+        resp.json.return_value = {}
+        mock_request.return_value = resp
+
+        client.get_root(params={"_fields": "namespaces"})
+        _, kwargs = mock_request.call_args
+        assert kwargs["params"] == {"_fields": "namespaces"}
+
+    @patch("wpa.api.requests.request")
+    def test_get_root_is_authenticated(self, mock_request, client):
+        resp = MagicMock()
+        resp.ok = True
+        resp.content = b"{}"
+        resp.json.return_value = {}
+        mock_request.return_value = resp
+
+        client.get_root()
+        _, kwargs = mock_request.call_args
+        assert "Authorization" in kwargs["headers"]
+
+    @patch("wpa.api.requests.request")
+    def test_get_root_size_cap_enforced(self, mock_request, client, monkeypatch):
+        monkeypatch.setenv("WPA_MAX_RESPONSE_BYTES", "10")
+
+        resp = MagicMock()
+        resp.ok = True
+        resp.status_code = 200
+        resp.url = "https://example.com/wp-json/"
+        resp.content = b"x" * 100
+        mock_request.return_value = resp
+
+        with pytest.raises(WPApiError) as exc_info:
+            client.get_root()
+        assert exc_info.value.code == "response_too_large"
