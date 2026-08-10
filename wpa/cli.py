@@ -122,6 +122,16 @@ from wpa.user import (
 from wpa.user import (
     validate_fields as validate_user_fields,
 )
+from wpa.widget import (
+    deactivate_widget,
+    delete_widget,
+    get_widget,
+    list_widgets,
+    update_widget,
+)
+from wpa.widget import (
+    validate_fields as validate_widget_fields,
+)
 
 
 def _format_api_error(e):
@@ -1099,6 +1109,94 @@ def _do_sidebar_list(args):  # pragma: no cover
         return _handle_api_error(e)
 
 
+def _do_widget_list(args):  # pragma: no cover
+    """List classic widgets."""
+    try:
+        client = WPApiClient.from_config(site_name=args.site, debug=args.debug)
+        fields = validate_widget_fields(args.fields)
+        rows = list_widgets(client, sidebar=args.sidebar)
+        if not rows and not (args.ids or args.count or args.field):
+            print(
+                "No widgets found. Block themes manage widgets as blocks; "
+                "this is expected on a block theme."
+            )
+            return 0
+        return _format_list_output(rows, fields, args)
+    except ValueError as e:
+        print(f"Error: {e}")
+        return 1
+    except (WPApiError, WPConnectionError, WPTimeoutError) as e:
+        return _handle_api_error(e)
+
+
+def _do_widget_get(args):  # pragma: no cover
+    """Get a single widget."""
+    try:
+        client = WPApiClient.from_config(site_name=args.site, debug=args.debug)
+        row = get_widget(client, args.id)
+        if args.format == "json":
+            print(json.dumps(row, indent=2, ensure_ascii=False))
+        else:
+            for key, value in row.items():
+                print(f"{key}: {value}")
+        return 0
+    except ValueError as e:
+        print(f"Error: {e}")
+        return 1
+    except (WPApiError, WPConnectionError, WPTimeoutError) as e:
+        return _handle_api_error(e)
+
+
+def _do_widget_update(args):  # pragma: no cover
+    """Move a widget and/or update its instance settings."""
+    try:
+        client = WPApiClient.from_config(site_name=args.site, debug=args.debug)
+        update_widget(
+            client, args.id, sidebar=args.sidebar, instance_json=args.instance_json
+        )
+        print(f"Widget {args.id} updated successfully!")
+        return 0
+    except ValueError as e:
+        print(f"Error: {e}")
+        return 1
+    except (WPApiError, WPConnectionError, WPTimeoutError) as e:
+        return _handle_api_error(e)
+
+
+def _do_widget_deactivate(args):  # pragma: no cover
+    """Move a widget to the inactive sidebar."""
+    try:
+        client = WPApiClient.from_config(site_name=args.site, debug=args.debug)
+        deactivate_widget(client, args.id)
+        print(f"Widget {args.id} moved to the inactive sidebar (settings kept).")
+        return 0
+    except ValueError as e:
+        print(f"Error: {e}")
+        return 1
+    except (WPApiError, WPConnectionError, WPTimeoutError) as e:
+        return _handle_api_error(e)
+
+
+def _do_widget_delete(args):  # pragma: no cover
+    """Delete a widget (inactive-sidebar by default, --force removes)."""
+    try:
+        client = WPApiClient.from_config(site_name=args.site, debug=args.debug)
+        delete_widget(client, args.id, force=args.force)
+        if args.force:
+            print(f"Widget {args.id} removed entirely.")
+        else:
+            print(
+                f"Widget {args.id} moved to the inactive sidebar "
+                "(use --force to remove entirely)."
+            )
+        return 0
+    except ValueError as e:
+        print(f"Error: {e}")
+        return 1
+    except (WPApiError, WPConnectionError, WPTimeoutError) as e:
+        return _handle_api_error(e)
+
+
 def _do_comment_list(args):  # pragma: no cover
     """List WordPress comments."""
     try:
@@ -2040,6 +2138,70 @@ def main(argv=None):
         "list", parents=[shared, list_p], help="List registered sidebars"
     )
     sidebar_list_parser.set_defaults(func=_do_sidebar_list)
+
+    # --- wpa widget ---
+    widget_parser = subparsers.add_parser(
+        "widget",
+        help="Classic widget commands (requires edit_theme_options capability)",
+    )
+    widget_subparsers = widget_parser.add_subparsers(dest="widget_command")
+
+    # wpa widget list
+    widget_list_parser = widget_subparsers.add_parser(
+        "list", parents=[shared, list_p], help="List widgets"
+    )
+    widget_list_parser.add_argument(
+        "--sidebar", help="Filter to one sidebar (e.g. sidebar-1)"
+    )
+    widget_list_parser.set_defaults(func=_do_widget_list)
+
+    # wpa widget get <id>
+    widget_get_parser = widget_subparsers.add_parser(
+        "get", parents=[shared], help="Get a single widget"
+    )
+    widget_get_parser.add_argument("id", help="Widget ID (e.g. recent-posts-3)")
+    widget_get_parser.add_argument(
+        "--format",
+        default="table",
+        choices=["table", "json"],
+        help="Output format (default: table)",
+    )
+    widget_get_parser.set_defaults(func=_do_widget_get)
+
+    # wpa widget update <id>
+    widget_update_parser = widget_subparsers.add_parser(
+        "update", parents=[shared], help="Move a widget or update its settings"
+    )
+    widget_update_parser.add_argument("id", help="Widget ID")
+    widget_update_parser.add_argument(
+        "--sidebar", help="Target sidebar ID (moves the widget)"
+    )
+    widget_update_parser.add_argument(
+        "--instance-json",
+        help='Instance settings as a JSON object (e.g. \'{"title": "X"}\')',
+    )
+    widget_update_parser.set_defaults(func=_do_widget_update)
+
+    # wpa widget deactivate <id>
+    widget_deactivate_parser = widget_subparsers.add_parser(
+        "deactivate",
+        parents=[shared],
+        help="Move a widget to the inactive sidebar (settings kept)",
+    )
+    widget_deactivate_parser.add_argument("id", help="Widget ID")
+    widget_deactivate_parser.set_defaults(func=_do_widget_deactivate)
+
+    # wpa widget delete <id>
+    widget_delete_parser = widget_subparsers.add_parser(
+        "delete", parents=[shared], help="Delete a widget"
+    )
+    widget_delete_parser.add_argument("id", help="Widget ID")
+    widget_delete_parser.add_argument(
+        "--force",
+        action="store_true",
+        help="Remove entirely (default moves to the inactive sidebar)",
+    )
+    widget_delete_parser.set_defaults(func=_do_widget_delete)
 
     # --- wpa comment ---
     comment_parser = subparsers.add_parser(
