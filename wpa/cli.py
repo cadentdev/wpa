@@ -6,6 +6,13 @@ import sys
 
 from wpa import __version__
 from wpa.api import WPApiClient
+from wpa.block import (
+    get_block,
+    list_blocks,
+)
+from wpa.block import (
+    validate_fields as validate_block_fields,
+)
 from wpa.comment import (
     COUNT_STATUSES as COMMENT_COUNT_STATUSES,
 )
@@ -120,6 +127,14 @@ from wpa.term import (
 )
 from wpa.term import (
     validate_fields as validate_term_fields,
+)
+from wpa.theme import (
+    THEME_STATUSES,
+    get_theme,
+    list_themes,
+)
+from wpa.theme import (
+    validate_fields as validate_theme_fields,
 )
 from wpa.user import (
     DEFAULT_FIELDS as USER_DEFAULT_FIELDS,
@@ -837,6 +852,71 @@ def _do_media_delete(args):  # pragma: no cover
 
 
 # --- Comment handlers ---
+
+
+def _do_block_list(args):  # pragma: no cover
+    """List registered block types."""
+    try:
+        client = WPApiClient.from_config(site_name=args.site, debug=args.debug)
+        fields = validate_block_fields(args.fields)
+        rows = list_blocks(client, namespace=args.namespace)
+        return _format_list_output(rows, fields, args)
+    except ValueError as e:
+        print(f"Error: {e}")
+        return 1
+    except (WPApiError, WPConnectionError, WPTimeoutError) as e:
+        return _handle_api_error(e)
+
+
+def _do_block_get(args):  # pragma: no cover
+    """Get a single registered block type."""
+    try:
+        client = WPApiClient.from_config(site_name=args.site, debug=args.debug)
+        row = get_block(client, args.block)
+        if args.format == "json":
+            print(json.dumps(row, indent=2, ensure_ascii=False))
+        else:
+            for key, value in row.items():
+                print(f"{key}: {value}")
+        return 0
+    except ValueError as e:
+        print(f"Error: {e}")
+        return 1
+    except (WPApiError, WPConnectionError, WPTimeoutError) as e:
+        return _handle_api_error(e)
+
+
+def _do_theme_list(args):  # pragma: no cover
+    """List installed themes."""
+    try:
+        client = WPApiClient.from_config(site_name=args.site, debug=args.debug)
+        fields = validate_theme_fields(args.fields)
+        status = None if args.status == "all" else args.status
+        rows = list_themes(client, status=status)
+        return _format_list_output(rows, fields, args)
+    except ValueError as e:
+        print(f"Error: {e}")
+        return 1
+    except (WPApiError, WPConnectionError, WPTimeoutError) as e:
+        return _handle_api_error(e)
+
+
+def _do_theme_get(args):  # pragma: no cover
+    """Get a single installed theme."""
+    try:
+        client = WPApiClient.from_config(site_name=args.site, debug=args.debug)
+        row = get_theme(client, args.stylesheet)
+        if args.format == "json":
+            print(json.dumps(row, indent=2, ensure_ascii=False))
+        else:
+            for key, value in row.items():
+                print(f"{key}: {value}")
+        return 0
+    except ValueError as e:
+        print(f"Error: {e}")
+        return 1
+    except (WPApiError, WPConnectionError, WPTimeoutError) as e:
+        return _handle_api_error(e)
 
 
 def _do_taxonomy_list(args):  # pragma: no cover
@@ -2054,6 +2134,71 @@ def main(argv=None):
     )
     post_type_get_parser.set_defaults(func=_do_post_type_get)
 
+    # --- wpa block ---
+    block_parser = subparsers.add_parser(
+        "block",
+        help="Inspect registered block types (read-only)",
+    )
+    block_subparsers = block_parser.add_subparsers(dest="block_command")
+
+    # wpa block list
+    block_list_parser = block_subparsers.add_parser(
+        "list", parents=[shared, list_p], help="List registered block types"
+    )
+    block_list_parser.add_argument(
+        "--namespace", help="Filter by block namespace (e.g. core)"
+    )
+    block_list_parser.set_defaults(func=_do_block_list)
+
+    # wpa block get <name>
+    block_get_parser = block_subparsers.add_parser(
+        "get", parents=[shared], help="Get a single registered block type"
+    )
+    block_get_parser.add_argument(
+        "block", help="Namespaced block name (e.g. core/paragraph)"
+    )
+    block_get_parser.add_argument(
+        "--format",
+        default="table",
+        choices=["table", "json"],
+        help="Output format (default: table)",
+    )
+    block_get_parser.set_defaults(func=_do_block_get)
+
+    # --- wpa theme ---
+    theme_parser = subparsers.add_parser(
+        "theme",
+        help="Read-only theme information (listing all requires switch_themes)",
+    )
+    theme_subparsers = theme_parser.add_subparsers(dest="theme_command")
+
+    # wpa theme list
+    theme_list_parser = theme_subparsers.add_parser(
+        "list", parents=[shared, list_p], help="List installed themes"
+    )
+    theme_list_parser.add_argument(
+        "--status",
+        choices=[*THEME_STATUSES, "all"],
+        default="all",
+        help="Filter by status (default: all)",
+    )
+    theme_list_parser.set_defaults(func=_do_theme_list)
+
+    # wpa theme get <stylesheet>
+    theme_get_parser = theme_subparsers.add_parser(
+        "get", parents=[shared], help="Get a single installed theme"
+    )
+    theme_get_parser.add_argument(
+        "stylesheet", help="Theme stylesheet (e.g. twentytwentyfive)"
+    )
+    theme_get_parser.add_argument(
+        "--format",
+        default="table",
+        choices=["table", "json"],
+        help="Output format (default: table)",
+    )
+    theme_get_parser.set_defaults(func=_do_theme_get)
+
     # --- wpa plugin ---
     plugin_parser = subparsers.add_parser(
         "plugin",
@@ -2615,6 +2760,18 @@ def main(argv=None):
         args, "post_type_command", None
     ):  # pragma: no cover
         post_type_parser.print_help()
+        return 1
+
+    if args.command == "block" and not getattr(
+        args, "block_command", None
+    ):  # pragma: no cover
+        block_parser.print_help()
+        return 1
+
+    if args.command == "theme" and not getattr(
+        args, "theme_command", None
+    ):  # pragma: no cover
+        theme_parser.print_help()
         return 1
 
     return args.func(args)
