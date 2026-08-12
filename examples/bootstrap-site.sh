@@ -10,11 +10,14 @@
 #      staging environments, using nothing but `wpa` CLI invocations.
 #
 #   2. A SMOKE TEST that exercises every user-facing wpa command we shipped
-#      through v0.8.0 — user CRUD + role management, media upload, page
+#      through v0.11.0 — user CRUD + role management, media upload, page
 #      CRUD with media embedding, post CRUD with media embedding, comment
-#      CRUD + moderation, and taxonomy term CRUD (categories and tags via
+#      CRUD + moderation + counts, taxonomy term CRUD (categories and tags via
 #      both the generic `wpa term` interface and the `wpa category` / `wpa
-#      tag` aliases).
+#      tag` aliases), plugin management, markdown-file content input, authored
+#      publishing, site settings, nav menus, sidebars and classic widgets, and
+#      the read-only introspection surface (taxonomies, post types, blocks,
+#      themes, REST API discovery).
 #
 # The script is creation-only by design. It does NOT delete the user,
 # posts, pages, or media items it creates. The intended reset pattern
@@ -117,13 +120,83 @@ done
 # Sanity checks
 # -----------------------------------------------------------------------------
 
-# Verify wpa is on PATH. We don't version-check — this script targets the
-# v0.8.0 command surface and will fail loudly on any missing subcommand
-# via `set -e` if run against an older wpa.
 command -v wpa >/dev/null 2>&1 || {
     echo "Error: wpa not found on PATH." >&2
     echo "Install with 'pip install wpa' or 'pip install -e .' from the wpa repo." >&2
     exit 1
+}
+
+# ⛔ VERSION ASSERTION — DO NOT REMOVE. This replaced a comment reading "We don't
+# version-check ... will fail loudly on any missing subcommand via set -e".
+# That reasoning was wrong in a way that yields a SILENT FALSE PASS:
+#
+#   Measured on flicky 2026-08-12 — `~/.local/bin/wpa` was **0.6.0** while the
+#   repo venv held the 0.11.0 editable install. Running this script exactly as
+#   its own usage line documents would have exercised a FIVE-RELEASE-OLD CLI,
+#   and the result would have been recorded as a v0.11.0 release gate.
+#
+# "It'll fail loudly" does not hold either: an older wpa exits 2 with an argparse
+# usage message, which reads like a flag typo rather than a version mismatch.
+# A gate that the wrong binary can pass is not a gate.
+#
+# Run from a checkout with the venv first on PATH:
+#   PATH="$PWD/.venv/bin:$PATH" ./examples/bootstrap-site.sh --site ct118 --prefix p
+REQUIRED_WPA_VERSION="0.11.0"
+ACTUAL_WPA_VERSION="$(wpa --version 2>&1 | grep -oE '[0-9]+\.[0-9]+\.[0-9]+' | head -n1 || true)"
+if [[ "${ACTUAL_WPA_VERSION}" != "${REQUIRED_WPA_VERSION}" ]]; then
+    echo "Error: this script targets the wpa ${REQUIRED_WPA_VERSION} command surface," >&2
+    echo "       but the wpa on PATH reports '${ACTUAL_WPA_VERSION:-unknown}'." >&2
+    echo "       Resolved binary: $(command -v wpa)" >&2
+    echo "       Run from a checkout with the venv first on PATH." >&2
+    exit 1
+fi
+echo "wpa ${ACTUAL_WPA_VERSION} — $(command -v wpa)"
+
+# -----------------------------------------------------------------------------
+# Helper: classify a failure as an ENVIRONMENT LIMIT rather than a wpa defect
+# -----------------------------------------------------------------------------
+#
+# Some of the v0.10.0 surface is classic-theme-only (sidebars, classic widgets,
+# nav menu locations) and some needs capabilities the App Password may not carry
+# (manage_options, edit_theme_options). On a block theme those legitimately have
+# nothing to return.
+#
+# ⛔ THE TRAP THIS AVOIDS: wrapping such calls in `|| true` would turn every
+# genuine wpa bug in these sections into an "environment limitation" and produce
+# a green gate over a broken CLI. So this helper branches THREE ways, not two:
+#
+#   rc = 0                      -> PASS, output shown
+#   rc != 0 and 401/403         -> ENVIRONMENT (capability not granted), noted
+#   rc != 0 and 404             -> ENVIRONMENT (route not registered), noted
+#   rc != 0 and anything else   -> re-raised, so `set -e` halts the run
+#
+# An empty-but-successful listing is a PASS, not an environment limit — the
+# command answered correctly, the answer was just "none".
+ENV_LIMITS=()
+soft_run() {
+    local label="$1"; shift
+    local output rc
+    set +e
+    output="$("$@" 2>&1)"
+    rc=$?
+    set -e
+    if [[ $rc -eq 0 ]]; then
+        echo "${output}"
+        return 0
+    fi
+    if grep -qE 'WordPress API error (401|403)' <<<"${output}"; then
+        echo "  [environment] ${label}: capability not granted to this App Password"
+        ENV_LIMITS+=("${label}: capability not granted")
+        return 0
+    fi
+    if grep -qE 'WordPress API error 404' <<<"${output}"; then
+        echo "  [environment] ${label}: REST route not registered on this install"
+        ENV_LIMITS+=("${label}: route not registered")
+        return 0
+    fi
+    echo "${output}" >&2
+    echo "Error: ${label} failed with rc=${rc} — this is a wpa defect, not an environment limit." >&2
+    return "${rc}"
 }
 
 # -----------------------------------------------------------------------------
@@ -617,6 +690,13 @@ echo
 #   - Updating a term's description after create
 #   - Deleting a term — which is always a permanent delete, not a trash
 
+# Comment counts per moderation status (NEW in v0.8.2). Runs last in this
+# section so the tally reflects everything the section did: the persistent
+# approved comment survives, the transient one was force-deleted.
+echo "Counting comments per moderation status..."
+wpa comment count --site "${SITE}"
+echo
+
 echo "=== 6. Taxonomy terms (categories and tags) ==="
 echo
 
@@ -749,7 +829,334 @@ wpa plugin list --site "${SITE}" --status active
 echo
 
 # =============================================================================
-# 8. SUMMARY
+# 8. MARKDOWN FILE INPUT AND AUTHORED PUBLISHING
+# =============================================================================
+# Exercises the following wpa subcommands:
+#
+#   - wpa post create --file   (NEW in v0.8.2 — markdown + YAML frontmatter)
+#   - wpa publish --author     (NEW in v0.9.0 — author override)
+#
+# What this tests/demonstrates:
+#
+#   - Authoring content as a markdown file rather than an inline --content
+#     string, which is the realistic workflow for anything longer than a
+#     sentence and the one the frontmatter parser exists to serve
+#   - Frontmatter supplying the title, so --title is NOT passed on the CLI
+#   - Attributing a published page to a specific user via --author, rather
+#     than to whoever owns the Application Password
+#
+# ⚠️ --author takes a user ID, not a username. We reuse USER_ID created in
+# section 1, which is the only non-admin user this run knows about.
+
+echo "=== 8. Markdown file input and authored publishing ==="
+echo
+
+MD_POST_FILE="$(mktemp -t "${PREFIX}-post-XXXXXX.md")"
+MD_PAGE_FILE="$(mktemp -t "${PREFIX}-page-XXXXXX.md")"
+
+# Frontmatter carries the title — the CLI deliberately does not pass --title,
+# so a regression in frontmatter parsing surfaces as a missing/blank title
+# rather than being masked by a CLI-supplied one.
+cat > "${MD_POST_FILE}" <<EOF
+---
+title: "${PREFIX}: Markdown post"
+status: publish
+---
+
+# ${PREFIX}: Markdown post
+
+This post was created from a **markdown file** via \`wpa post create --file\`,
+not from an inline \`--content\` string.
+
+- Frontmatter supplied the title
+- The body was converted from markdown to HTML by wpa
+EOF
+
+cat > "${MD_PAGE_FILE}" <<EOF
+---
+title: "${PREFIX}: Authored page"
+status: publish
+---
+
+# ${PREFIX}: Authored page
+
+This page was published with \`wpa publish --author\`, attributing it to a
+user other than the owner of the Application Password.
+EOF
+
+echo "Creating a post from a markdown file (title comes from frontmatter)..."
+MD_POST_OUT=$(wpa post create --file "${MD_POST_FILE}" --site "${SITE}")
+echo "${MD_POST_OUT}"
+MD_POST_ID=$(echo "${MD_POST_OUT}" | extract_id)
+echo "  -> post ID ${MD_POST_ID}"
+echo
+
+echo "Verifying the frontmatter title round-tripped..."
+wpa post get "${MD_POST_ID}" --site "${SITE}"
+echo
+
+echo "Publishing a page attributed to user ${USER_ID} via 'wpa publish --author'..."
+MD_PAGE_OUT=$(wpa publish "${MD_PAGE_FILE}" --author "${USER_ID}" --site "${SITE}")
+echo "${MD_PAGE_OUT}"
+MD_PAGE_ID=$(echo "${MD_PAGE_OUT}" | extract_id)
+echo "  -> page ID ${MD_PAGE_ID}"
+echo
+
+echo "Confirming the author stuck (expect author=${USER_ID}, not the API-password owner)..."
+wpa page get "${MD_PAGE_ID}" --site "${SITE}"
+echo
+
+rm -f "${MD_POST_FILE}" "${MD_PAGE_FILE}"
+
+# =============================================================================
+# 9. SITE SETTINGS
+# =============================================================================
+# Exercises the following wpa subcommands:
+#
+#   - wpa option list    (NEW in v0.10.0)
+#   - wpa option get     (NEW in v0.10.0)
+#   - wpa option update  (NEW in v0.10.0)
+#
+# What this tests/demonstrates:
+#
+#   - Reading and writing WordPress settings through the REST API
+#
+# ⚠️ REGISTERED SETTINGS ONLY. The REST settings endpoint exposes the settings
+# core registers (title, description, timezone, posts_per_page, ...) — not the
+# whole wp_options table. Asking for an unregistered name is a 404 BY DESIGN and
+# must not be read as a wpa defect. We use `description` (the site tagline)
+# because it is registered, harmless, and visibly wrong if it fails to write.
+# Requires manage_options.
+
+echo "=== 9. Site settings ==="
+echo
+
+echo "Listing registered settings..."
+soft_run "option list" wpa option list --site "${SITE}"
+echo
+
+echo "Reading the current tagline..."
+soft_run "option get description" wpa option get description --site "${SITE}"
+echo
+
+echo "Setting the tagline to a prefixed value..."
+soft_run "option update description" \
+    wpa option update description "${PREFIX}: bootstrapped tagline" --site "${SITE}"
+echo
+
+echo "Reading it back to prove the write landed..."
+soft_run "option get description (readback)" wpa option get description --site "${SITE}"
+echo
+
+# =============================================================================
+# 10. NAV MENUS
+# =============================================================================
+# Exercises the following wpa subcommands:
+#
+#   - wpa menu create         (NEW in v0.10.0)
+#   - wpa menu get            (NEW in v0.10.0)
+#   - wpa menu list           (NEW in v0.10.0)
+#   - wpa menu item add       (NEW in v0.10.0)
+#   - wpa menu item list      (NEW in v0.10.0)
+#   - wpa menu location list  (NEW in v0.10.0)
+#
+# What this tests/demonstrates:
+#
+#   - Creating a nav menu and hanging both a custom link and a real page off it
+#
+# ⚠️ MENUS OUTLIVE CLASSIC THEMES. Nav menus are the `nav_menu` taxonomy, which
+# core registers regardless of the active theme — so create/add works on a block
+# theme even though the theme will never render the result. Menu LOCATIONS are
+# theme-declared, so `menu location list` legitimately returns nothing under a
+# block theme. Empty there is a PASS, not a failure.
+#
+# ⚠️ ARGUMENT SHAPE DIFFERS BETWEEN THE TWO: `menu item add` takes the menu as a
+# POSITIONAL, `menu item list` takes it as `--menu`. Not a bug, but easy to trip
+# over — see the note filed against the repo.
+
+echo "=== 10. Nav menus ==="
+echo
+
+echo "Creating a nav menu..."
+MENU_OUT=$(wpa menu create --name "${PREFIX} Main Menu" --site "${SITE}")
+echo "${MENU_OUT}"
+MENU_ID=$(echo "${MENU_OUT}" | extract_id)
+echo "  -> menu ID ${MENU_ID}"
+echo
+
+echo "Fetching the menu back..."
+wpa menu get "${MENU_ID}" --site "${SITE}"
+echo
+
+echo "Adding a custom link item (menu ID is POSITIONAL here)..."
+wpa menu item add "${MENU_ID}" \
+    --title "${PREFIX}: External" \
+    --url "https://example.com/${PREFIX}" \
+    --site "${SITE}"
+echo
+
+echo "Adding an item pointing at the About page created in section 3..."
+wpa menu item add "${MENU_ID}" \
+    --title "${PREFIX}: About" \
+    --object page \
+    --object-id "${ABOUT_ID}" \
+    --site "${SITE}"
+echo
+
+echo "Listing the menu's items (menu ID is a FLAG here)..."
+wpa menu item list --menu "${MENU_ID}" --site "${SITE}"
+echo
+
+echo "Listing all menus..."
+wpa menu list --site "${SITE}"
+echo
+
+echo "Listing theme-declared menu locations (empty under a block theme)..."
+wpa menu location list --site "${SITE}"
+echo
+
+# =============================================================================
+# 11. SIDEBARS AND CLASSIC WIDGETS
+# =============================================================================
+# Exercises the following wpa subcommands:
+#
+#   - wpa sidebar list  (NEW in v0.10.0)
+#   - wpa widget list   (NEW in v0.10.0)
+#   - wpa widget get    (NEW in v0.10.0)
+#
+# What this tests/demonstrates:
+#
+#   - Enumerating registered sidebars and the widgets sitting in them
+#
+# ⚠️ READ-ONLY ON PURPOSE. widget update/deactivate/delete exist but are NOT
+# exercised here: under a block theme the only sidebar is `wp_inactive_widgets`,
+# the holding pen, so a "move" has nowhere to move to and a delete would destroy
+# state the rollback is meant to define. Read-only keeps this section honest on
+# both theme styles.
+#
+# ⚠️ A BLOCK THEME REGISTERS NO SIDEBARS. An empty listing here is the CORRECT
+# answer, not a failure — which is exactly why these calls report what they got
+# rather than asserting a non-empty result.
+
+echo "=== 11. Sidebars and classic widgets ==="
+echo
+
+echo "Listing registered sidebars..."
+soft_run "sidebar list" wpa sidebar list --site "${SITE}"
+echo
+
+echo "Listing widgets..."
+soft_run "widget list" wpa widget list --site "${SITE}"
+echo
+
+# Pick the first widget ID, if any exist, and fetch it. Under a block theme the
+# inactive-widgets pen usually holds a few `block-N` widgets from core defaults.
+# See the note in section 12: the `grep -v '^Warning:'` works around
+# cadentdev/wpa#81, where the LAN-HTTP warning lands on stdout. Remove it once
+# that issue is fixed.
+FIRST_WIDGET_ID=$(wpa widget list --site "${SITE}" --field id 2>/dev/null \
+    | grep -v '^Warning:' | head -n1 | tr -d '[:space:]' || true)
+
+if [[ -n "${FIRST_WIDGET_ID}" ]]; then
+    echo "Fetching widget '${FIRST_WIDGET_ID}'..."
+    soft_run "widget get" wpa widget get "${FIRST_WIDGET_ID}" --site "${SITE}"
+else
+    echo "  [environment] no widgets registered on this install — nothing to fetch"
+    ENV_LIMITS+=("widget get: no widgets registered")
+fi
+echo
+
+# =============================================================================
+# 12. INTROSPECTION AND DISCOVERY
+# =============================================================================
+# Exercises the following wpa subcommands:
+#
+#   - wpa taxonomy list   (NEW in v0.11.0)
+#   - wpa taxonomy get    (NEW in v0.11.0)
+#   - wpa post-type list  (NEW in v0.11.0)
+#   - wpa post-type get   (NEW in v0.11.0)
+#   - wpa block list      (NEW in v0.11.0)
+#   - wpa block get       (NEW in v0.11.0)
+#   - wpa theme list      (NEW in v0.11.0)
+#   - wpa theme get       (NEW in v0.11.0)
+#   - wpa api discover    (NEW in v0.11.0)
+#
+# What this tests/demonstrates:
+#
+#   - Asking a site what it actually supports before acting on it, which is the
+#     whole point of the v0.11.0 surface: these are the commands you run FIRST
+#     against an unfamiliar install
+#
+# All read-only. The fixed arguments below (`category`, `page`, `core/paragraph`)
+# are core-guaranteed on any WordPress, so a failure here is a wpa defect rather
+# than a property of the install. The theme argument is resolved from the live
+# listing instead, since which theme is active varies by target.
+
+echo "=== 12. Introspection and discovery ==="
+echo
+
+echo "Listing registered taxonomies..."
+wpa taxonomy list --site "${SITE}"
+echo
+
+echo "Fetching the 'category' taxonomy (core-guaranteed)..."
+wpa taxonomy get category --site "${SITE}"
+echo
+
+echo "Listing registered post types..."
+wpa post-type list --site "${SITE}"
+echo
+
+echo "Fetching the 'page' post type (core-guaranteed)..."
+wpa post-type get page --site "${SITE}"
+echo
+
+echo "Listing registered block types..."
+wpa block list --site "${SITE}"
+echo
+
+echo "Fetching the 'core/paragraph' block (core-guaranteed)..."
+wpa block get core/paragraph --site "${SITE}"
+echo
+
+echo "Listing installed themes..."
+wpa theme list --site "${SITE}"
+echo
+
+# Resolve the ACTIVE theme from the listing rather than hardcoding a stylesheet:
+# the target's theme is a property of the install, not of wpa.
+#
+# ⛔ DO NOT PARSE THE TABLE FORMAT WITH awk POSITIONALS. The first attempt used
+# `awk '$3 == "active"'`, which broke on the very first run: the `name` column
+# holds "Twenty Twenty-Five", so the space inside the value shifts every later
+# field and $3 is "Twenty-Five", never "active". Table output is for humans —
+# any value containing a space silently derails column-position parsing.
+#
+# ⚠️ AND DO NOT USE `--format json` HERE EITHER, for now. On an http:// LAN site
+# wpa prints its "Using HTTP on a private/LAN address" warning to STDOUT, so the
+# JSON does not parse — cadentdev/wpa#81. `--field` is contaminated the same way.
+# The grep below drops that line, which keeps this working both before and after
+# that issue is fixed; delete the filter once #81 has landed.
+ACTIVE_THEME=$(wpa theme list --site "${SITE}" --status active --field stylesheet 2>/dev/null \
+    | grep -v '^Warning:' | head -n1 | tr -d '[:space:]' || true)
+if [[ -n "${ACTIVE_THEME}" ]]; then
+    echo "Fetching the active theme '${ACTIVE_THEME}'..."
+    wpa theme get "${ACTIVE_THEME}" --site "${SITE}"
+else
+    echo "Error: could not resolve an active theme via" >&2
+    echo "       'wpa theme list --status active --field stylesheet'." >&2
+    echo "       Every WordPress install has exactly one active theme, so this is" >&2
+    echo "       a wpa defect in --status/--field, not an environment limit." >&2
+    exit 1
+fi
+echo
+
+echo "Enumerating the REST API surface..."
+wpa api discover --site "${SITE}"
+echo
+
+# =============================================================================
+# 13. SUMMARY
 # =============================================================================
 
 echo "============================================================"
@@ -771,7 +1178,28 @@ printf "  %-10s ID=%-6s %s\n" "Post"     "${FEATURED_ID}"    "title=${PREFIX}: F
 printf "  %-10s ID=%-6s %s\n" "Category" "${CAT_ID}"            "name=${PREFIX} Alias Category (updated)"
 printf "  %-10s ID=%-6s %s\n" "Tag"      "${TAG_ID}"            "name=${PREFIX}-alias-tag"
 printf "  %-10s ID=%-6s %s\n" "Comment"  "${PERSIST_COMMENT_ID}" "on Featured post (approved, persistent)"
+printf "  %-10s ID=%-6s %s\n" "Post"     "${MD_POST_ID}"      "title=${PREFIX}: Markdown post (from --file)"
+printf "  %-10s ID=%-6s %s\n" "Page"     "${MD_PAGE_ID}"      "title=${PREFIX}: Authored page (author=${USER_ID})"
+printf "  %-10s ID=%-6s %s\n" "Menu"     "${MENU_ID}"         "name=${PREFIX} Main Menu (2 items)"
 echo
+echo "Site settings changed (reset by rolling the target back to baseline):"
+echo
+printf "  %-10s %s\n" "Tagline" "${PREFIX}: bootstrapped tagline"
+echo
+
+# Environment limits are reported SEPARATELY from failures. A limit means the
+# command answered correctly and the answer was "this install has none of that"
+# — a block theme with no sidebars, say. Anything that actually broke would have
+# halted the run long before here, via set -e.
+if [[ ${#ENV_LIMITS[@]} -gt 0 ]]; then
+    echo "Environment limits observed (NOT failures — do not file these as bugs):"
+    echo
+    for limit in "${ENV_LIMITS[@]}"; do
+        printf "  - %s\n" "${limit}"
+    done
+    echo
+fi
+
 echo "Created and then deleted during the run (v0.8.0 surface):"
 echo
 printf "  %-10s          %s\n" "Comment"  "transient, walked state machine — trashed then force-deleted"

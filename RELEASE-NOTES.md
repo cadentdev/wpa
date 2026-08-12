@@ -73,6 +73,48 @@ credential-bearing flow gets an undiluted security audit.
 
 697 tests, 98% coverage. All new commands are read-only.
 
+### Live smoke test — PASSED 2026-08-12
+
+`examples/bootstrap-site.sh` ran clean end-to-end (exit 0) against **CT 118
+(`wp-stage-18`, 192.168.52.18)** on pve-terrace, rolled back to the
+`wpa_baseline` snapshot first. Target: WordPress on **Twenty Twenty-Five**
+(a block theme), exercised with **wpa 0.11.0**.
+
+The script was extended for this run from the v0.8.0 surface to the full
+v0.11.0 surface — five new sections covering markdown-file input and
+authored publishing, site settings, nav menus, sidebars and widgets, and
+the introspection group, plus `comment count`. All twelve sections passed,
+and no environment limits were hit: nav menus create fine under a block
+theme because `nav_menu` is a core taxonomy, and only menu *locations*
+(theme-declared) came back empty, which is the correct answer there.
+
+Two findings, neither of which blocks the release:
+
+- **[#81](https://github.com/cadentdev/wpa/issues/81) (bug)** — the
+  LAN-HTTP warning is printed to *stdout*, so `--format json` emits invalid
+  JSON and `--field` output carries a leading warning line. Machine-readable
+  output is unusable on `http://` private-address sites without filtering.
+  Two `print()` calls in `config.py` are missing `file=sys.stderr`. Invisible
+  over HTTPS, which is how it survived to v0.11.0.
+- **[#82](https://github.com/cadentdev/wpa/issues/82) (enhancement)** —
+  `menu item add` takes the menu as a positional while `menu item list`
+  takes `--menu`.
+
+Two things about the run itself are worth recording, because either would
+have produced a **false pass**:
+
+- The `wpa` on the runner's PATH was **0.6.0** while the repo venv held
+  0.11.0. Invoking the script as its own usage line documented would have
+  gated v0.11.0 against a five-release-old CLI and reported it as green.
+  The script now asserts `wpa --version` before doing anything and prints
+  the resolved binary; the old comment explaining why no version check was
+  needed has been removed, with the reasoning that replaced it.
+- The first run failed on the script's own `awk '$3 == "active"'` theme
+  parsing — `Twenty Twenty-Five` contains a space, so every later column
+  shifts. Table output is for humans; the script now uses
+  `--status active --field stylesheet`. Reaching for `--format json`
+  instead is what surfaced #81.
+
 ## v0.10.0 — Phase 6: Plugins, Menus, Widgets, Settings (2026-08-09)
 
 Five new command groups covering PRD Phase 6 — the site-structure tier of
