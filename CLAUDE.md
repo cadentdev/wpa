@@ -89,6 +89,13 @@ Every release follows this arc. Steps 1–3 are planning, 4–6 repeat per PR, 7
    deserves undivided audit attention. Get the plan approved before implementation starts.
 4. **TDD loop (per PR)** — write failing tests for the new behavior first, implement until GREEN,
    refactor. Coverage stays ≥98%; only thin CLI adapter functions may use `# pragma: no cover`.
+   **Out-of-scope findings become issues before the PR is opened.** Anything noticed and
+   deliberately left out — a neighbouring bug, a gap the issue did not cover, a follow-up
+   enhancement — is filed as a GitHub issue: reproduced against `main` first, with the
+   reproduction in the issue. The PR body lists each one by issue number under "Not in this PR";
+   describing a finding there without an issue number is not enough, because PR prose is not
+   tracked. Do not attach these issues to the milestone — release scope is a human decision
+   (step 2).
 5. **CI green (per PR)** — full matrix passes, including ruff, bandit, and pip-audit. Timing notes:
    `gh pr checks <n> --watch` reports "no checks" if run within seconds of PR creation — wait ~30s
    first. Stacked PRs (base ≠ main) get no CI runs at all until rebased onto main after their base
@@ -113,7 +120,8 @@ Every release follows this arc. Steps 1–3 are planning, 4–6 repeat per PR, 7
     PyPI. Gotchas: installing seconds after publish can fail on CDN propagation — retry after
     ~1 min before diagnosing; and verify from a neutral cwd, since importing `wpa` from the repo
     root picks up the local package and masks a failed install. Hold a short retrospective; file
-    follow-up issues. Close the milestone. Announce (GitHub feed, LinkedIn, Cadent blog — outside
+    follow-up issues, and check that every "Not in this PR" entry in the release's PRs carries an
+    issue number. Close the milestone. Announce (GitHub feed, LinkedIn, Cadent blog — outside
     this repo's scope).
 13. **Workflow review** — retro the workflow itself, not just the release: which steps produced
     value, which were friction, what got discovered ad hoc that a step should have caught? Apply
