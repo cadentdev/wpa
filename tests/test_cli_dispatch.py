@@ -81,7 +81,9 @@ class TestEveryGroupIsCovered:
         main([])
         out = capsys.readouterr().out
         # The top-level usage line names every command: {publish,post,...}
-        listed = out.split("{", 1)[1].split("}", 1)[0].split(",")
+        # (argparse may wrap it, so drop whitespace before splitting).
+        usage = "".join(out.split())
+        listed = usage.split("{", 1)[1].split("}", 1)[0].split(",")
         leaves = {"publish"}
         assert set(listed) - leaves == set(TOP_LEVEL_GROUPS)
 
