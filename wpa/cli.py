@@ -1649,6 +1649,17 @@ def _shared_parser():
     return p
 
 
+def _get_parser():
+    """Parent parser for every `get` command: the --raw flag."""
+    p = argparse.ArgumentParser(add_help=False)
+    p.add_argument(
+        "--raw",
+        action="store_true",
+        help="Print the full, unflattened API response as JSON (overrides --format)",
+    )
+    return p
+
+
 def _list_parser():
     """Parent parser for list subcommands with output formatting."""
     p = argparse.ArgumentParser(add_help=False)
@@ -1668,17 +1679,6 @@ def _list_parser():
         default=None,
         metavar="FIELD",
         help="Output a single field per result",
-    )
-    return p
-
-
-def _get_parser():
-    """Parent parser for every `get` command: the --raw flag."""
-    p = argparse.ArgumentParser(add_help=False)
-    p.add_argument(
-        "--raw",
-        action="store_true",
-        help="Print the full, unflattened API response as JSON (overrides --format)",
     )
     return p
 
