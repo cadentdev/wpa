@@ -1,9 +1,10 @@
 {
   "permissions": {
     "deny": [
-      "Bash(gh pr merge:*)",
+      "Bash(gh pr merge --admin:*)",
       "Bash(gh release:*)",
       "Bash(gh workflow run:*)",
+      "mcp__github__actions_run_trigger",
       "Bash(git push --force:*)",
       "Bash(git push -f:*)",
       "Bash(git push --tags:*)",
