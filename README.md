@@ -62,6 +62,11 @@ wpa post create --site mysite --title "My Post" --content "<p>Hello</p>" --statu
 # title/status/slug; CLI flags override frontmatter)
 wpa post create --site mysite --file article.md --author 15 --categories 3,7
 
+# Create a post with content piped from another command (HTML on stdin).
+# --content, --file and --stdin are mutually exclusive; pass --site, since
+# stdin cannot also answer the site-selection prompt
+echo "<p>Hello</p>" | wpa post create --site mysite --title "My Post" --stdin
+
 # Update a post
 wpa post update 42 --site mysite --title "Updated Title" --status publish
 

@@ -98,6 +98,7 @@ from wpa.post import (
     delete_post,
     get_post,
     list_posts,
+    read_stdin_content,
     update_post,
 )
 from wpa.post import (
@@ -338,14 +339,31 @@ def _do_post_get(args):  # pragma: no cover
 def _do_post_create(args):  # pragma: no cover
     """Create a new WordPress post."""
     try:
-        if args.file and args.content:
-            print("Error: --file and --content are mutually exclusive.")
+        sources = [bool(args.content), bool(args.file), args.stdin]
+        if sum(sources) > 1:
+            print(
+                "Error: --content, --file and --stdin are mutually exclusive; "
+                "choose one content source."
+            )
             return 1
         if not args.file and not args.title:
             print("Error: Provide --title, or --file with a markdown file.")
             return 1
 
-        client = WPApiClient.from_config(site_name=args.site, debug=args.debug)
+        if args.stdin:
+            # Read the content before anything else can touch stdin. With
+            # stdin spoken for, an interactive site prompt cannot be answered.
+            stdin_content = read_stdin_content()
+            try:
+                client = WPApiClient.from_config(site_name=args.site, debug=args.debug)
+            except EOFError:
+                print(
+                    "Error: --stdin uses standard input for the post content, "
+                    "so a site cannot be chosen interactively. Pass --site <name>."
+                )
+                return 1
+        else:
+            client = WPApiClient.from_config(site_name=args.site, debug=args.debug)
 
         # Parse categories and tags from comma-separated strings
         categories = None
@@ -369,7 +387,7 @@ def _do_post_create(args):  # pragma: no cover
             )
         else:
             title = args.title
-            content = args.content or ""
+            content = stdin_content if args.stdin else (args.content or "")
             status = args.status or "draft"
             slug = args.slug
             author = args.author
@@ -1789,13 +1807,24 @@ def main(argv=None):
     post_create_parser.add_argument(
         "--title", help="Post title (required unless --file supplies one)"
     )
-    post_create_parser.add_argument("--content", help="Post content (HTML)")
+    post_create_parser.add_argument(
+        "--content",
+        help="Post content (HTML). Mutually exclusive with --file and --stdin.",
+    )
     post_create_parser.add_argument(
         "--file",
         help=(
             "Markdown file with YAML frontmatter; the body is converted to "
             "HTML. CLI flags override frontmatter. Mutually exclusive with "
-            "--content."
+            "--content and --stdin."
+        ),
+    )
+    post_create_parser.add_argument(
+        "--stdin",
+        action="store_true",
+        help=(
+            "Read post content (HTML) from standard input. Mutually exclusive "
+            "with --content and --file."
         ),
     )
     post_create_parser.add_argument(

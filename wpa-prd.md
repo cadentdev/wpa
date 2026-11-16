@@ -252,7 +252,7 @@ These are the quality bars every release meets (folded in from the retired devel
 |---|---|
 | `wpa post list` | List posts with `--status`, `--author`, `--category`, `--tag`, `--search`, `--orderby`, `--order`, `--per-page` |
 | `wpa post get <id>` | Get a single post by ID |
-| `wpa post create` | Create a post from CLI flags (`--title`, `--content`, `--status`, `--author`, `--category`, `--tag`, `--featured-media`) or from a markdown file with `--file` (v0.8.2); CLI flags override frontmatter |
+| `wpa post create` | Create a post from CLI flags (`--title`, `--content`, `--status`, `--author`, `--category`, `--tag`, `--featured-media`) or from a markdown file with `--file` (v0.8.2); CLI flags override frontmatter. `--stdin` reads HTML content from standard input (v0.12.0); `--content`, `--file` and `--stdin` are mutually exclusive |
 | `wpa post update <id>` | Update post fields |
 | `wpa post delete <id>` | Trash or `--force` delete a post |
 
