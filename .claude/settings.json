@@ -1,0 +1,27 @@
+{
+  "permissions": {
+    "deny": [
+      "Bash(gh pr merge:*)",
+      "Bash(gh release:*)",
+      "Bash(gh workflow run:*)",
+      "Bash(git push --force:*)",
+      "Bash(git push -f:*)",
+      "Bash(git push --tags:*)",
+      "Bash(git push origin main:*)",
+      "Bash(git push origin v:*)",
+      "Read(./.env)"
+    ]
+  },
+  "hooks": {
+    "Stop": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "bash \"$CLAUDE_PROJECT_DIR/.claude/hooks/check-before-stop.sh\""
+          }
+        ]
+      }
+    ]
+  }
+}

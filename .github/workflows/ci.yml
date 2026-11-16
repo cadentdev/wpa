@@ -50,4 +50,4 @@ jobs:
           pip-audit
 
       - name: Test
-        run: pytest --cov=wpa --cov-report=term-missing
+        run: pytest --cov=wpa --cov-report=term-missing --cov-fail-under=98
