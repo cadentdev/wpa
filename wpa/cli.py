@@ -62,6 +62,7 @@ from wpa.menu import (
     list_menu_items,
     list_menu_locations,
     list_menus,
+    resolve_menu_arg,
     update_menu_item,
     validate_item_fields,
     validate_menu_fields,
@@ -98,6 +99,7 @@ from wpa.post import (
     delete_post,
     get_post,
     list_posts,
+    read_stdin_content,
     update_post,
 )
 from wpa.post import (
@@ -353,14 +355,31 @@ def _do_post_get(args):  # pragma: no cover
 def _do_post_create(args):  # pragma: no cover
     """Create a new WordPress post."""
     try:
-        if args.file and args.content:
-            print("Error: --file and --content are mutually exclusive.")
+        sources = [bool(args.content), bool(args.file), args.stdin]
+        if sum(sources) > 1:
+            print(
+                "Error: --content, --file and --stdin are mutually exclusive; "
+                "choose one content source."
+            )
             return 1
         if not args.file and not args.title:
             print("Error: Provide --title, or --file with a markdown file.")
             return 1
 
-        client = WPApiClient.from_config(site_name=args.site, debug=args.debug)
+        if args.stdin:
+            # Read the content before anything else can touch stdin. With
+            # stdin spoken for, an interactive site prompt cannot be answered.
+            stdin_content = read_stdin_content()
+            try:
+                client = WPApiClient.from_config(site_name=args.site, debug=args.debug)
+            except EOFError:
+                print(
+                    "Error: --stdin uses standard input for the post content, "
+                    "so a site cannot be chosen interactively. Pass --site <name>."
+                )
+                return 1
+        else:
+            client = WPApiClient.from_config(site_name=args.site, debug=args.debug)
 
         # Parse categories and tags from comma-separated strings
         categories = None
@@ -384,7 +403,7 @@ def _do_post_create(args):  # pragma: no cover
             )
         else:
             title = args.title
-            content = args.content or ""
+            content = stdin_content if args.stdin else (args.content or "")
             status = args.status or "draft"
             slug = args.slug
             author = args.author
@@ -1121,7 +1140,8 @@ def _do_menu_item_list(args):  # pragma: no cover
     try:
         client = WPApiClient.from_config(site_name=args.site, debug=args.debug)
         fields = validate_item_fields(args.fields)
-        rows = list_menu_items(client, menu=args.menu)
+        menu = resolve_menu_arg(args.menu, args.menu_flag)
+        rows = list_menu_items(client, menu=menu)
         return _format_list_output(rows, fields, args)
     except ValueError as e:
         print(f"Error: {e}")
@@ -1133,10 +1153,11 @@ def _do_menu_item_list(args):  # pragma: no cover
 def _do_menu_item_add(args):  # pragma: no cover
     """Add an item to a nav menu."""
     try:
+        menu = resolve_menu_arg(args.menu, args.menu_flag, required=True)
         client = WPApiClient.from_config(site_name=args.site, debug=args.debug)
         result = create_menu_item(
             client,
-            args.menu,
+            menu,
             title=args.title,
             url=args.url,
             object_type=args.object,
@@ -1683,6 +1704,29 @@ def _list_parser():
     return p
 
 
+# --- Dispatch helpers ---
+
+
+def _group_parser(parser, args):
+    """Return the deepest parser the parsed arguments reached.
+
+    Walks the subcommand tree following the choices recorded in `args`:
+    `wpa` yields the top-level parser, `wpa menu` the menu parser,
+    `wpa menu item` the menu-item parser. Used to print the right help
+    when a group is invoked without a subcommand, so new groups need no
+    per-group guard in main().
+    """
+    while True:
+        subcommands = next(
+            (a for a in parser._actions if isinstance(a, argparse._SubParsersAction)),
+            None,
+        )
+        chosen = getattr(args, subcommands.dest, None) if subcommands else None
+        if not chosen:
+            return parser
+        parser = subcommands.choices[chosen]
+
+
 # --- Main entry point ---
 
 
@@ -1766,13 +1810,24 @@ def main(argv=None):
     post_create_parser.add_argument(
         "--title", help="Post title (required unless --file supplies one)"
     )
-    post_create_parser.add_argument("--content", help="Post content (HTML)")
+    post_create_parser.add_argument(
+        "--content",
+        help="Post content (HTML). Mutually exclusive with --file and --stdin.",
+    )
     post_create_parser.add_argument(
         "--file",
         help=(
             "Markdown file with YAML frontmatter; the body is converted to "
             "HTML. CLI flags override frontmatter. Mutually exclusive with "
-            "--content."
+            "--content and --stdin."
+        ),
+    )
+    post_create_parser.add_argument(
+        "--stdin",
+        action="store_true",
+        help=(
+            "Read post content (HTML) from standard input. Mutually exclusive "
+            "with --content and --file."
         ),
     )
     post_create_parser.add_argument(
@@ -2322,18 +2377,46 @@ def main(argv=None):
     menu_item_parser = menu_subparsers.add_parser("item", help="Menu item commands")
     menu_item_subparsers = menu_item_parser.add_subparsers(dest="menu_item_command")
 
-    # wpa menu item list --menu <id>
+    # The menu can be named positionally or with --menu on both `list` and
+    # `add` (#82). The positional is the wp-cli shape; the two are merged by
+    # resolve_menu_arg().
+
+    # wpa menu item list [<menu-id>]
     item_list_parser = menu_item_subparsers.add_parser(
         "list", parents=[shared, list_p], help="List menu items"
     )
-    item_list_parser.add_argument("--menu", type=int, help="Filter to one menu's items")
+    item_list_parser.add_argument(
+        "menu",
+        nargs="?",
+        type=int,
+        help="Menu ID: list only this menu's items (default: all menus)",
+    )
+    item_list_parser.add_argument(
+        "--menu",
+        dest="menu_flag",
+        type=int,
+        metavar="MENU",
+        help="Same as the positional menu ID",
+    )
     item_list_parser.set_defaults(func=_do_menu_item_list)
 
     # wpa menu item add <menu-id>
     item_add_parser = menu_item_subparsers.add_parser(
         "add", parents=[shared], help="Add an item to a menu"
     )
-    item_add_parser.add_argument("menu", type=int, help="Menu ID to add to")
+    item_add_parser.add_argument(
+        "menu",
+        nargs="?",
+        type=int,
+        help="Menu ID to add to (required, here or via --menu)",
+    )
+    item_add_parser.add_argument(
+        "--menu",
+        dest="menu_flag",
+        type=int,
+        metavar="MENU",
+        help="Same as the positional menu ID",
+    )
     item_add_parser.add_argument(
         "--title", help="Link text (required for custom links)"
     )
@@ -2733,83 +2816,14 @@ def main(argv=None):
     # --- Parse and dispatch ---
     args = parser.parse_args(argv)
 
-    if not args.command:  # pragma: no cover
-        parser.print_help()
+    # Only leaf commands bind a handler. Anything else is a bare group
+    # (`wpa`, `wpa plugin`, `wpa menu item`): print that group's help.
+    func = getattr(args, "func", None)
+    if func is None:
+        _group_parser(parser, args).print_help()
         return 1
 
-    if args.command == "post" and not args.post_command:  # pragma: no cover
-        post_parser.print_help()
-        return 1
-
-    if args.command == "page" and not args.page_command:  # pragma: no cover
-        page_parser.print_help()
-        return 1
-
-    if args.command == "site" and not args.site_command:  # pragma: no cover
-        site_parser.print_help()
-        return 1
-
-    if args.command == "user" and not args.user_command:  # pragma: no cover
-        user_parser.print_help()
-        return 1
-
-    if args.command == "media" and not args.media_command:  # pragma: no cover
-        media_parser.print_help()
-        return 1
-
-    if args.command == "comment" and not args.comment_command:  # pragma: no cover
-        comment_parser.print_help()
-        return 1
-
-    if args.command == "term" and not getattr(
-        args, "term_command", None
-    ):  # pragma: no cover
-        term_parser.print_help()
-        return 1
-
-    if args.command == "category" and not getattr(
-        args, "category_command", None
-    ):  # pragma: no cover
-        category_parser.print_help()
-        return 1
-
-    if args.command == "tag" and not getattr(
-        args, "tag_command", None
-    ):  # pragma: no cover
-        tag_parser.print_help()
-        return 1
-
-    if args.command == "taxonomy" and not getattr(
-        args, "taxonomy_command", None
-    ):  # pragma: no cover
-        taxonomy_parser.print_help()
-        return 1
-
-    if args.command == "post-type" and not getattr(
-        args, "post_type_command", None
-    ):  # pragma: no cover
-        post_type_parser.print_help()
-        return 1
-
-    if args.command == "api" and not getattr(
-        args, "api_command", None
-    ):  # pragma: no cover
-        api_parser.print_help()
-        return 1
-
-    if args.command == "block" and not getattr(
-        args, "block_command", None
-    ):  # pragma: no cover
-        block_parser.print_help()
-        return 1
-
-    if args.command == "theme" and not getattr(
-        args, "theme_command", None
-    ):  # pragma: no cover
-        theme_parser.print_help()
-        return 1
-
-    return args.func(args)
+    return func(args)
 
 
 if __name__ == "__main__":  # pragma: no cover

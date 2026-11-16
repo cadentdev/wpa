@@ -1,5 +1,7 @@
 """Post CRUD operations via WordPress REST API."""
 
+import sys
+
 from wpa.api import build_endpoint
 
 # Maps friendly field names to WordPress REST API response keys
@@ -164,6 +166,32 @@ def get_post(client, post_id, embed=False, raw=False):
         params["_embed"] = True
     data = client.get(build_endpoint("posts", post_id), params=params)
     return data if raw else _extract_post_row(data)
+
+
+def read_stdin_content(stream=None):
+    """Read post content (HTML) from standard input.
+
+    The text is returned exactly as received. Empty input is rejected:
+    in a pipeline it almost always means the upstream command failed,
+    and silently creating an empty post would hide that.
+
+    Args:
+        stream: Text stream to read (default: sys.stdin).
+
+    Returns:
+        The content string.
+
+    Raises:
+        ValueError: If the input is empty or whitespace only.
+    """
+    content = (stream or sys.stdin).read()
+    if not content.strip():
+        raise ValueError(
+            "--stdin was given but standard input was empty. "
+            "Pipe the post content in, e.g. "
+            "'echo \"<p>Hello</p>\" | wpa post create --title T --stdin'."
+        )
+    return content
 
 
 def create_post(

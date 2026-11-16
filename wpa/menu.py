@@ -165,6 +165,38 @@ def delete_menu(client, menu_id):
 # --- Menu items ---
 
 
+def resolve_menu_arg(positional, flag, required=False):
+    """Merge the two ways of naming a menu into one menu ID.
+
+    `menu item list` and `menu item add` both accept the menu as a
+    positional (`<menu>`, matching wp-cli and the rest of this CLI) and
+    as `--menu`. Either shape works on either command.
+
+    Args:
+        positional: Menu ID given positionally, or None.
+        flag: Menu ID given with --menu, or None.
+        required: Raise when neither is given (True for `add`).
+
+    Returns:
+        The menu ID, or None when neither was given and it is optional.
+
+    Raises:
+        ValueError: If the two disagree, or neither is given when required.
+    """
+    if positional is not None and flag is not None and positional != flag:
+        raise ValueError(
+            f"Conflicting menu IDs: {positional} (positional) and "
+            f"{flag} (--menu). Give the menu once."
+        )
+    menu = positional if positional is not None else flag
+    if menu is None and required:
+        raise ValueError(
+            "A menu ID is required: pass it as <menu> or with --menu "
+            "(e.g. 'wpa menu item add 3 ...' or 'wpa menu item add --menu 3 ...')."
+        )
+    return menu
+
+
 def list_menu_items(client, menu=None):
     """Fetch menu items, optionally filtered to one menu.
 
