@@ -96,8 +96,12 @@ def list_blocks(client, namespace=None):
     return [_extract_block_row(b) for b in data]
 
 
-def get_block(client, name):
-    """Get a single registered block type by namespaced name."""
+def get_block(client, name, raw=False):
+    """Get a single registered block type by namespaced name.
+
+    With raw=True, returns the unflattened API response instead of the
+    friendly-field row.
+    """
     endpoint = _block_endpoint(name)
     data = client.get(endpoint, params={"context": "edit"})
-    return _extract_block_row(data)
+    return data if raw else _extract_block_row(data)

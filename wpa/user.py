@@ -103,20 +103,23 @@ def _extract_user_row(api_user):
     return row
 
 
-def get_user(client, user_id):
+def get_user(client, user_id, raw=False):
     """Get a single user by ID.
 
     Args:
         client: WPApiClient instance.
         user_id: User ID.
+        raw: Return the unflattened API response instead of the
+            friendly-field row.
 
     Returns:
-        User dict with friendly field names.
+        User dict with friendly field names,
+        or the raw API response dict when raw is True.
     """
     _validate_user_id(user_id)
     params = {"context": "edit"}
     data = client.get(build_endpoint("users", user_id), params=params)
-    return _extract_user_row(data)
+    return data if raw else _extract_user_row(data)
 
 
 def set_role(client, user_id, role):

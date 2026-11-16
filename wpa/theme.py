@@ -112,8 +112,12 @@ def list_themes(client, status=None):
     return [_extract_theme_row(t) for t in data]
 
 
-def get_theme(client, stylesheet):
-    """Get a single installed theme by stylesheet (e.g. 'twentytwentyfive')."""
+def get_theme(client, stylesheet, raw=False):
+    """Get a single installed theme by stylesheet (e.g. 'twentytwentyfive').
+
+    With raw=True, returns the unflattened API response instead of the
+    friendly-field row.
+    """
     endpoint = _theme_endpoint(stylesheet)
     data = client.get(endpoint, params={"context": "edit"})
-    return _extract_theme_row(data)
+    return data if raw else _extract_theme_row(data)

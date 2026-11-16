@@ -119,23 +119,26 @@ def list_pages(
     return [_extract_page_row(p) for p in client.get_list("pages", params=params)]
 
 
-def get_page(client, page_id, embed=False):
+def get_page(client, page_id, embed=False, raw=False):
     """Get a single page by ID.
 
     Args:
         client: WPApiClient instance.
         page_id: Page ID.
         embed: Include linked resources.
+        raw: Return the unflattened API response instead of the
+            friendly-field row.
 
     Returns:
-        Page dict with friendly field names.
+        Page dict with friendly field names,
+        or the raw API response dict when raw is True.
     """
     _validate_page_id(page_id)
     params = {"context": "edit"}
     if embed:
         params["_embed"] = True
     data = client.get(build_endpoint("pages", page_id), params=params)
-    return _extract_page_row(data)
+    return data if raw else _extract_page_row(data)
 
 
 def create_page(

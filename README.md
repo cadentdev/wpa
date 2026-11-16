@@ -362,6 +362,10 @@ wpa post-type get post --site mysite --format json
 # Registered block types (sites register hundreds; scope with --namespace)
 wpa block list --site mysite --namespace core
 wpa block get core/paragraph --site mysite
+
+# The full API object — block attributes/supports, taxonomy labels/capabilities
+wpa block get core/paragraph --site mysite --raw
+wpa taxonomy get category --site mysite --raw
 ```
 
 All read-only.
@@ -413,6 +417,17 @@ wpa user list --site mysite --fields id,username,email
 # Debug mode (print HTTP request/response details)
 wpa post list --site mysite --debug
 ```
+
+Every `get` command prints a friendly subset of fields (also with `--format json`).
+Add `--raw` to print the complete, unflattened API response as JSON instead:
+
+```bash
+wpa post get 42 --site mysite --raw
+wpa plugin get akismet/akismet --site mysite --raw | jq '.requires_php'
+```
+
+`--raw` overrides `--format`. For `option get`, whose value is never flattened,
+it is the same as `--format json`.
 
 ### Site management
 
