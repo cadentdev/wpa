@@ -122,11 +122,15 @@ def list_menus(client, search=None):
     ]
 
 
-def get_menu(client, menu_id):
-    """Get a single nav menu by ID."""
+def get_menu(client, menu_id, raw=False):
+    """Get a single nav menu by ID.
+
+    With raw=True, returns the unflattened API response instead of the
+    friendly-field row.
+    """
     _validate_id(menu_id, "menu ID")
     data = client.get(build_endpoint("menus", menu_id), params={"context": "edit"})
-    return _extract_row(data, MENU_FIELDS)
+    return data if raw else _extract_row(data, MENU_FIELDS)
 
 
 def create_menu(client, name, description=None):

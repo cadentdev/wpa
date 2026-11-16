@@ -216,6 +216,26 @@ def _handle_api_error(e):  # pragma: no cover
     return 1
 
 
+def _format_get_output(data, fmt, raw=False):
+    """Render the result of a `get` command — shared by every get handler.
+
+    Args:
+        data: The friendly-field row, or with raw=True the unflattened API
+            response. `option get` passes a bare value rather than a dict.
+        fmt: "table" (key: value lines) or "json".
+        raw: The data is the full API response; always rendered as JSON,
+            whatever fmt says.
+
+    Returns:
+        The text to print.
+    """
+    if raw or fmt == "json":
+        return json.dumps(data, indent=2, ensure_ascii=False)
+    if isinstance(data, dict):
+        return "\n".join(f"{key}: {value}" for key, value in data.items())
+    return str(data)
+
+
 def _format_list_output(rows, fields, args):  # pragma: no cover
     """Handle list output with --ids, --count, --field, or standard format."""
     if args.ids:
@@ -322,13 +342,8 @@ def _do_post_get(args):  # pragma: no cover
     """Get a single WordPress post."""
     try:
         client = WPApiClient.from_config(site_name=args.site, debug=args.debug)
-        row = get_post(client, args.id, embed=args.embed)
-
-        if args.format == "json":
-            print(json.dumps(row, indent=2, ensure_ascii=False))
-        else:
-            for key, value in row.items():
-                print(f"{key}: {value}")
+        row = get_post(client, args.id, embed=args.embed, raw=args.raw)
+        print(_format_get_output(row, args.format, args.raw))
         return 0
     except ValueError as e:
         print(f"Error: {e}")
@@ -490,13 +505,8 @@ def _do_page_get(args):  # pragma: no cover
     """Get a single WordPress page."""
     try:
         client = WPApiClient.from_config(site_name=args.site, debug=args.debug)
-        row = get_page(client, args.id, embed=args.embed)
-
-        if args.format == "json":
-            print(json.dumps(row, indent=2, ensure_ascii=False))
-        else:
-            for key, value in row.items():
-                print(f"{key}: {value}")
+        row = get_page(client, args.id, embed=args.embed, raw=args.raw)
+        print(_format_get_output(row, args.format, args.raw))
         return 0
     except ValueError as e:
         print(f"Error: {e}")
@@ -761,12 +771,8 @@ def _do_user_get(args):  # pragma: no cover
     """Get a single WordPress user."""
     try:
         client = WPApiClient.from_config(site_name=args.site, debug=args.debug)
-        row = get_user(client, args.id)
-        if args.format == "json":
-            print(json.dumps(row, indent=2, ensure_ascii=False))
-        else:
-            for key, value in row.items():
-                print(f"{key}: {value}")
+        row = get_user(client, args.id, raw=args.raw)
+        print(_format_get_output(row, args.format, args.raw))
         return 0
     except ValueError as e:
         print(f"Error: {e}")
@@ -819,12 +825,8 @@ def _do_media_get(args):  # pragma: no cover
     """Get a single WordPress media item."""
     try:
         client = WPApiClient.from_config(site_name=args.site, debug=args.debug)
-        row = get_media(client, args.id)
-        if args.format == "json":
-            print(json.dumps(row, indent=2, ensure_ascii=False))
-        else:
-            for key, value in row.items():
-                print(f"{key}: {value}")
+        row = get_media(client, args.id, raw=args.raw)
+        print(_format_get_output(row, args.format, args.raw))
         return 0
     except ValueError as e:
         print(f"Error: {e}")
@@ -917,12 +919,8 @@ def _do_block_get(args):  # pragma: no cover
     """Get a single registered block type."""
     try:
         client = WPApiClient.from_config(site_name=args.site, debug=args.debug)
-        row = get_block(client, args.block)
-        if args.format == "json":
-            print(json.dumps(row, indent=2, ensure_ascii=False))
-        else:
-            for key, value in row.items():
-                print(f"{key}: {value}")
+        row = get_block(client, args.block, raw=args.raw)
+        print(_format_get_output(row, args.format, args.raw))
         return 0
     except ValueError as e:
         print(f"Error: {e}")
@@ -950,12 +948,8 @@ def _do_theme_get(args):  # pragma: no cover
     """Get a single installed theme."""
     try:
         client = WPApiClient.from_config(site_name=args.site, debug=args.debug)
-        row = get_theme(client, args.stylesheet)
-        if args.format == "json":
-            print(json.dumps(row, indent=2, ensure_ascii=False))
-        else:
-            for key, value in row.items():
-                print(f"{key}: {value}")
+        row = get_theme(client, args.stylesheet, raw=args.raw)
+        print(_format_get_output(row, args.format, args.raw))
         return 0
     except ValueError as e:
         print(f"Error: {e}")
@@ -982,12 +976,8 @@ def _do_taxonomy_get(args):  # pragma: no cover
     """Get a single registered taxonomy."""
     try:
         client = WPApiClient.from_config(site_name=args.site, debug=args.debug)
-        row = get_taxonomy(client, args.taxonomy)
-        if args.format == "json":
-            print(json.dumps(row, indent=2, ensure_ascii=False))
-        else:
-            for key, value in row.items():
-                print(f"{key}: {value}")
+        row = get_taxonomy(client, args.taxonomy, raw=args.raw)
+        print(_format_get_output(row, args.format, args.raw))
         return 0
     except ValueError as e:
         print(f"Error: {e}")
@@ -1014,12 +1004,8 @@ def _do_post_type_get(args):  # pragma: no cover
     """Get a single registered post type."""
     try:
         client = WPApiClient.from_config(site_name=args.site, debug=args.debug)
-        row = get_post_type(client, args.post_type)
-        if args.format == "json":
-            print(json.dumps(row, indent=2, ensure_ascii=False))
-        else:
-            for key, value in row.items():
-                print(f"{key}: {value}")
+        row = get_post_type(client, args.post_type, raw=args.raw)
+        print(_format_get_output(row, args.format, args.raw))
         return 0
     except ValueError as e:
         print(f"Error: {e}")
@@ -1046,12 +1032,8 @@ def _do_plugin_get(args):  # pragma: no cover
     """Get a single installed plugin."""
     try:
         client = WPApiClient.from_config(site_name=args.site, debug=args.debug)
-        row = get_plugin(client, args.plugin)
-        if args.format == "json":
-            print(json.dumps(row, indent=2, ensure_ascii=False))
-        else:
-            for key, value in row.items():
-                print(f"{key}: {value}")
+        row = get_plugin(client, args.plugin, raw=args.raw)
+        print(_format_get_output(row, args.format, args.raw))
         return 0
     except ValueError as e:
         print(f"Error: {e}")
@@ -1113,12 +1095,8 @@ def _do_menu_get(args):  # pragma: no cover
     """Get a single nav menu."""
     try:
         client = WPApiClient.from_config(site_name=args.site, debug=args.debug)
-        row = get_menu(client, args.id)
-        if args.format == "json":
-            print(json.dumps(row, indent=2, ensure_ascii=False))
-        else:
-            for key, value in row.items():
-                print(f"{key}: {value}")
+        row = get_menu(client, args.id, raw=args.raw)
+        print(_format_get_output(row, args.format, args.raw))
         return 0
     except ValueError as e:
         print(f"Error: {e}")
@@ -1267,10 +1245,9 @@ def _do_option_get(args):  # pragma: no cover
     try:
         client = WPApiClient.from_config(site_name=args.site, debug=args.debug)
         value = get_setting(client, args.name)
-        if args.format == "json":
-            print(json.dumps(value, indent=2, ensure_ascii=False))
-        else:
-            print(value)
+        # A setting's value is already the unflattened API value, so --raw
+        # is the same as --format json here.
+        print(_format_get_output(value, args.format, args.raw))
         return 0
     except ValueError as e:
         print(f"Error: {e}")
@@ -1338,12 +1315,8 @@ def _do_widget_get(args):  # pragma: no cover
     """Get a single widget."""
     try:
         client = WPApiClient.from_config(site_name=args.site, debug=args.debug)
-        row = get_widget(client, args.id)
-        if args.format == "json":
-            print(json.dumps(row, indent=2, ensure_ascii=False))
-        else:
-            for key, value in row.items():
-                print(f"{key}: {value}")
+        row = get_widget(client, args.id, raw=args.raw)
+        print(_format_get_output(row, args.format, args.raw))
         return 0
     except ValueError as e:
         print(f"Error: {e}")
@@ -1430,12 +1403,8 @@ def _do_comment_get(args):  # pragma: no cover
     """Get a single WordPress comment."""
     try:
         client = WPApiClient.from_config(site_name=args.site, debug=args.debug)
-        row = get_comment(client, args.id)
-        if args.format == "json":
-            print(json.dumps(row, indent=2, ensure_ascii=False))
-        else:
-            for key, value in row.items():
-                print(f"{key}: {value}")
+        row = get_comment(client, args.id, raw=args.raw)
+        print(_format_get_output(row, args.format, args.raw))
         return 0
     except ValueError as e:
         print(f"Error: {e}")
@@ -1615,12 +1584,8 @@ def _do_term_get(args):  # pragma: no cover
     """Get a single WordPress term."""
     try:
         client = WPApiClient.from_config(site_name=args.site, debug=args.debug)
-        row = get_term(client, args.id, taxonomy=args.taxonomy)
-        if args.format == "json":
-            print(json.dumps(row, indent=2, ensure_ascii=False))
-        else:
-            for key, value in row.items():
-                print(f"{key}: {value}")
+        row = get_term(client, args.id, taxonomy=args.taxonomy, raw=args.raw)
+        print(_format_get_output(row, args.format, args.raw))
         return 0
     except ValueError as e:
         print(f"Error: {e}")
@@ -1705,6 +1670,17 @@ def _shared_parser():
     return p
 
 
+def _get_parser():
+    """Parent parser for every `get` command: the --raw flag."""
+    p = argparse.ArgumentParser(add_help=False)
+    p.add_argument(
+        "--raw",
+        action="store_true",
+        help="Print the full, unflattened API response as JSON (overrides --format)",
+    )
+    return p
+
+
 def _list_parser():
     """Parent parser for list subcommands with output formatting."""
     p = argparse.ArgumentParser(add_help=False)
@@ -1766,6 +1742,7 @@ def main(argv=None):
     subparsers = parser.add_subparsers(dest="command")
     shared = _shared_parser()
     list_p = _list_parser()
+    get_p = _get_parser()
 
     # --- wpa publish ---
     publish_parser = subparsers.add_parser(
@@ -1812,7 +1789,7 @@ def main(argv=None):
 
     # wpa post get <id>
     post_get_parser = post_subparsers.add_parser(
-        "get", parents=[shared], help="Get a single post"
+        "get", parents=[shared, get_p], help="Get a single post"
     )
     post_get_parser.add_argument("id", type=int, help="Post ID")
     post_get_parser.add_argument(
@@ -1914,7 +1891,7 @@ def main(argv=None):
 
     # wpa page get <id>
     page_get_parser = page_subparsers.add_parser(
-        "get", parents=[shared], help="Get a single page"
+        "get", parents=[shared, get_p], help="Get a single page"
     )
     page_get_parser.add_argument("id", type=int, help="Page ID")
     page_get_parser.add_argument(
@@ -2080,7 +2057,7 @@ def main(argv=None):
 
     # wpa user get <id>
     user_get_parser = user_subparsers.add_parser(
-        "get", parents=[shared], help="Get a single user"
+        "get", parents=[shared, get_p], help="Get a single user"
     )
     user_get_parser.add_argument("id", type=int, help="User ID")
     user_get_parser.add_argument(
@@ -2128,7 +2105,7 @@ def main(argv=None):
 
     # wpa media get <id>
     media_get_parser = media_subparsers.add_parser(
-        "get", parents=[shared], help="Get a single media item"
+        "get", parents=[shared, get_p], help="Get a single media item"
     )
     media_get_parser.add_argument("id", type=int, help="Media ID")
     media_get_parser.add_argument(
@@ -2178,7 +2155,7 @@ def main(argv=None):
 
     # wpa taxonomy get <slug>
     taxonomy_get_parser = taxonomy_subparsers.add_parser(
-        "get", parents=[shared], help="Get a single registered taxonomy"
+        "get", parents=[shared, get_p], help="Get a single registered taxonomy"
     )
     taxonomy_get_parser.add_argument("taxonomy", help="Taxonomy slug (e.g. category)")
     taxonomy_get_parser.add_argument(
@@ -2204,7 +2181,7 @@ def main(argv=None):
 
     # wpa post-type get <slug>
     post_type_get_parser = post_type_subparsers.add_parser(
-        "get", parents=[shared], help="Get a single registered post type"
+        "get", parents=[shared, get_p], help="Get a single registered post type"
     )
     post_type_get_parser.add_argument("post_type", help="Post type slug (e.g. post)")
     post_type_get_parser.add_argument(
@@ -2257,7 +2234,7 @@ def main(argv=None):
 
     # wpa block get <name>
     block_get_parser = block_subparsers.add_parser(
-        "get", parents=[shared], help="Get a single registered block type"
+        "get", parents=[shared, get_p], help="Get a single registered block type"
     )
     block_get_parser.add_argument(
         "block", help="Namespaced block name (e.g. core/paragraph)"
@@ -2291,7 +2268,7 @@ def main(argv=None):
 
     # wpa theme get <stylesheet>
     theme_get_parser = theme_subparsers.add_parser(
-        "get", parents=[shared], help="Get a single installed theme"
+        "get", parents=[shared, get_p], help="Get a single installed theme"
     )
     theme_get_parser.add_argument(
         "stylesheet", help="Theme stylesheet (e.g. twentytwentyfive)"
@@ -2326,7 +2303,7 @@ def main(argv=None):
 
     # wpa plugin get <plugin>
     plugin_get_parser = plugin_subparsers.add_parser(
-        "get", parents=[shared], help="Get a single installed plugin"
+        "get", parents=[shared, get_p], help="Get a single installed plugin"
     )
     plugin_get_parser.add_argument(
         "plugin", help="Plugin identifier (e.g. akismet/akismet)"
@@ -2368,7 +2345,7 @@ def main(argv=None):
 
     # wpa menu get <id>
     menu_get_parser = menu_subparsers.add_parser(
-        "get", parents=[shared], help="Get a single nav menu"
+        "get", parents=[shared, get_p], help="Get a single nav menu"
     )
     menu_get_parser.add_argument("id", type=int, help="Menu ID")
     menu_get_parser.add_argument(
@@ -2512,7 +2489,7 @@ def main(argv=None):
 
     # wpa option get <name>
     option_get_parser = option_subparsers.add_parser(
-        "get", parents=[shared], help="Get a single setting's value"
+        "get", parents=[shared, get_p], help="Get a single setting's value"
     )
     option_get_parser.add_argument("name", help="Setting name (e.g. title)")
     option_get_parser.add_argument(
@@ -2565,7 +2542,7 @@ def main(argv=None):
 
     # wpa widget get <id>
     widget_get_parser = widget_subparsers.add_parser(
-        "get", parents=[shared], help="Get a single widget"
+        "get", parents=[shared, get_p], help="Get a single widget"
     )
     widget_get_parser.add_argument("id", help="Widget ID (e.g. recent-posts-3)")
     widget_get_parser.add_argument(
@@ -2642,7 +2619,7 @@ def main(argv=None):
 
     # wpa comment get <id>
     comment_get_parser = comment_subparsers.add_parser(
-        "get", parents=[shared], help="Get a single comment"
+        "get", parents=[shared, get_p], help="Get a single comment"
     )
     comment_get_parser.add_argument("id", type=int, help="Comment ID")
     comment_get_parser.add_argument(
@@ -2765,7 +2742,9 @@ def main(argv=None):
         list_parser_.set_defaults(func=_do_term_list)
 
         # get
-        get_parser_ = sub.add_parser("get", parents=[shared], help="Get a single term")
+        get_parser_ = sub.add_parser(
+            "get", parents=[shared, get_p], help="Get a single term"
+        )
         get_parser_.add_argument("id", type=int, help="Term ID")
         _taxonomy_arg(get_parser_)
         get_parser_.add_argument(

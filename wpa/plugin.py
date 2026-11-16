@@ -145,20 +145,23 @@ def list_plugins(client, status=None, search=None):
     return [_extract_plugin_row(p) for p in data]
 
 
-def get_plugin(client, plugin_id):
+def get_plugin(client, plugin_id, raw=False):
     """Get a single installed plugin.
 
     Args:
         client: WPApiClient instance.
         plugin_id: Plugin identifier ('folder/file', 'folder/file.php',
             or bare slug).
+        raw: Return the unflattened API response instead of the
+            friendly-field row.
 
     Returns:
-        Plugin dict with friendly field names.
+        Plugin dict with friendly field names,
+        or the raw API response dict when raw is True.
     """
     endpoint = _plugin_endpoint(plugin_id)
     data = client.get(endpoint, params={"context": "edit"})
-    return _extract_plugin_row(data)
+    return data if raw else _extract_plugin_row(data)
 
 
 def update_plugin(client, plugin_id, status):

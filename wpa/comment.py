@@ -183,21 +183,24 @@ def count_comments(client, status=None):
     return counts
 
 
-def get_comment(client, comment_id):
+def get_comment(client, comment_id, raw=False):
     """Get a single comment by ID.
 
     Args:
         client: WPApiClient instance.
         comment_id: Comment ID.
+        raw: Return the unflattened API response instead of the
+            friendly-field row.
 
     Returns:
-        Comment dict with friendly field names.
+        Comment dict with friendly field names,
+        or the raw API response dict when raw is True.
     """
     _validate_comment_id(comment_id)
     data = client.get(
         build_endpoint("comments", comment_id), params={"context": "edit"}
     )
-    return _extract_comment_row(data)
+    return data if raw else _extract_comment_row(data)
 
 
 def create_comment(
