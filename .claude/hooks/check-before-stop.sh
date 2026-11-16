@@ -13,7 +13,10 @@ active=$(printf '%s' "$input" | python3 -c 'import json, sys; print(json.load(sy
 
 cd "${CLAUDE_PROJECT_DIR:-.}" || exit 0
 
-if out=$( { ruff check . && ruff format --check . && pytest -q --cov=wpa --cov-fail-under=98; } 2>&1 ); then
+# Run the tools as modules of the interpreter the project is installed into.
+# A bare `pytest`/`ruff` can resolve to an unrelated install on PATH (e.g. a
+# uv tool shim) that lacks pytest-cov or the project's dependencies.
+if out=$( { python3 -m ruff check . && python3 -m ruff format --check . && python3 -m pytest -q --cov=wpa --cov-fail-under=98; } 2>&1 ); then
   exit 0
 fi
 
