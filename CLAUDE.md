@@ -59,7 +59,7 @@ CI runs on ubuntu/macos/windows across Python 3.10, 3.11, 3.12, 3.13, plus a wee
 
 **Global flags**: `--debug` (HTTP request/response details) available on all commands. `--site` selects a named site config.
 
-**Tests**: All in `tests/` (697 tests), use `unittest.mock` to mock HTTP requests. No live WordPress connection needed.
+**Tests**: All in `tests/`, use `unittest.mock` to mock HTTP requests. No live WordPress connection needed.
 
 ## Key Conventions
 
@@ -81,12 +81,16 @@ Every release follows this arc. Steps 1–3 are planning, 4–6 repeat per PR, 7
 2. **Select** — group issues into a release using the PRD roadmap as the guide. Create a GitHub
    milestone `vX.Y.Z` and attach the selected issues, so release scope is visible on GitHub and the
    retro can check shipped-vs-selected from the record. Apply the semver gate: any compatibility
-   break (interpreter floor, removed flag, changed default) makes it a minor release.
+   break (interpreter floor, removed flag, changed default) makes it a minor release. Each selected
+   issue that adds or changes a command, flag, or argument states the wp-cli equivalent (or "none")
+   and the shape wpa will use, so a departure from wp-cli is decided here, not argued in the PR.
 3. **Plan** — organize the work into distinct, reviewable PRs. Prefer independent PRs merged in
    sequence over stacked PRs — stacked PRs get no CI until rebased onto main, so a stack flies
-   blind until its base merges. Size gate: if a release exceeds ~4 feature PRs, consider splitting
-   it into two releases — audit quality dilutes with diff size, and security-sensitive work
-   deserves undivided audit attention. Get the plan approved before implementation starts.
+   blind until its base merges. Size gate: if a release exceeds ~4 PRs that touch the request path,
+   credentials, or input validation, consider splitting it into two releases — audit quality
+   dilutes with diff size, and security-sensitive work deserves undivided audit attention. Small
+   fixes outside those areas do not count toward the gate. Get the plan approved before
+   implementation starts.
 4. **TDD loop (per PR)** — write failing tests for the new behavior first, implement until GREEN,
    refactor. Coverage stays ≥98%; only thin CLI adapter functions may use `# pragma: no cover`.
    **Out-of-scope findings become issues before the PR is opened.** Anything noticed and
@@ -100,6 +104,10 @@ Every release follows this arc. Steps 1–3 are planning, 4–6 repeat per PR, 7
    `gh pr checks <n> --watch` reports "no checks" if run within seconds of PR creation — wait ~30s
    first. Stacked PRs (base ≠ main) get no CI runs at all until rebased onto main after their base
    merges; ci.yml only triggers on PRs targeting main.
+   **Combined-state check** — once every PR for the release is open, and before the first merge,
+   merge all the release's branches into a scratch copy of `main` and run lint, bandit, and the
+   full suite there. PRs that are each green can still conflict or break together; fix what this
+   finds on the branches, not at merge time.
 6. **Merge (per PR)** — merge-commit strategy (not squash). Surface discovered smells as new issues
    rather than widening the PR. An agent session may merge a PR itself when every condition below
    holds; if one does not, it stops and says which:
@@ -125,7 +133,8 @@ Every release follows this arc. Steps 1–3 are planning, 4–6 repeat per PR, 7
    touches the request path and a staging site is available, also run
    `examples/bootstrap-site.sh` against it as a live smoke test.
 9. **Docs** — update README, wpa-prd.md (Current release, §6.1 implemented commands, roadmap),
-   CLAUDE.md (test count), then RELEASE-NOTES.md last, when scope is final.
+   CLAUDE.md (architecture notes for new modules and commands), then RELEASE-NOTES.md last, when
+   scope is final.
 10. **Version bump** — `wpa/__init__.py` (single source; `pyproject.toml` reads it dynamically).
 11. **Ship (human only)** — merge the release PR, tag the merge commit `vX.Y.Z`, create the GitHub Release
     (title `vX.Y.Z — Short Name`, body = that version's RELEASE-NOTES.md section). Trusted
@@ -140,6 +149,24 @@ Every release follows this arc. Steps 1–3 are planning, 4–6 repeat per PR, 7
 13. **Workflow review** — retro the workflow itself, not just the release: which steps produced
     value, which were friction, what got discovered ad hoc that a step should have caught? Apply
     accepted improvements to this section before starting the next release.
+
+### PR conventions
+
+These apply to every PR in the per-PR steps (4–6).
+
+- **Branches** — one branch per PR, off `main`. Agent sessions name them
+  `<session-branch>-<issue>-<slug>` (e.g. `claude/<session>-81-http-warning-stderr`), so a session
+  pinned to one branch name has an unambiguous prefix for the others.
+- **Staging** — stage files by path (`git add <file> ...`), never `git add -A` or `git add .`.
+  Tools run during development leave files behind; a stray file removed in a follow-up commit
+  still stays in history under the merge-commit strategy.
+- **Docs placement** — a feature PR updates the docs for the command it changes: that command's
+  README section and its `wpa-prd.md` §6.1 row. Release-level docs stay in the release PR:
+  RELEASE-NOTES.md, the PRD "Current release" and roadmap, and the version bump (steps 9–10).
+- **PR body** — include a **Behaviour changes** heading listing anything an existing user or
+  script could notice: changed exit codes, changed or moved messages, changed defaults, renamed
+  flags. Write "None" if there are none. Step 9 collects these for RELEASE-NOTES.md, and they
+  feed the semver gate in step 2.
 
 ## Key Documents
 
