@@ -15,7 +15,7 @@ WPA is a client-side automation tool (not a wp-cli replacement). It covers the s
 pip install -e '.[dev]'
 
 # Run all tests with coverage
-pytest --cov=wpa --cov-report=term-missing
+pytest --cov=wpa --cov-report=term-missing --cov-fail-under=98
 
 # Run a single test file
 pytest tests/test_user.py
@@ -71,6 +71,7 @@ CI runs on ubuntu/macos/windows across Python 3.10, 3.11, 3.12, 3.13, plus a wee
 - Default status for content creation is always `draft`
 - HTTPS enforced for public addresses; HTTP allowed only for private/LAN
 - Security audits: `bandit` (static analysis) and `pip-audit` (dependency vulnerabilities) run in CI on every PR
+- Agent sessions (local or cloud): `.claude/settings.json` denies merging PRs, publishing releases, running workflows, force pushes, pushes to `main` or tags, and reading `.env`. Merges and releases are human steps. A Stop hook (`.claude/hooks/check-before-stop.sh`) runs ruff, the format check, and the full suite with the 98% coverage floor before a session ends
 
 ## Release Workflow
 
