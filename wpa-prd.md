@@ -320,7 +320,7 @@ These are the quality bars every release meets (folded in from the retired devel
 | Command | Description |
 |---|---|
 | `wpa menu list/get/create/delete` | Menu CRUD. Delete is always permanent and removes the menu's items |
-| `wpa menu item list/add/update/delete` | Item management. `add` supports custom links (`--title --url`) and object links (`--object --object-id`, type inferred) |
+| `wpa menu item list/add/update/delete` | Item management. `add` supports custom links (`--title --url`) and object links (`--object --object-id`, type inferred). `list` and `add` take the menu ID positionally (wp-cli shape) or as `--menu` (v0.12.0) |
 | `wpa menu location list` | Read-only location listing; assignment is theme-dependent and not exposed by the REST API |
 
 **Widgets** (Tier 3, shipped v0.10.0; requires `edit_theme_options`)
