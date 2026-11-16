@@ -62,6 +62,7 @@ from wpa.menu import (
     list_menu_items,
     list_menu_locations,
     list_menus,
+    resolve_menu_arg,
     update_menu_item,
     validate_item_fields,
     validate_menu_fields,
@@ -1143,7 +1144,8 @@ def _do_menu_item_list(args):  # pragma: no cover
     try:
         client = WPApiClient.from_config(site_name=args.site, debug=args.debug)
         fields = validate_item_fields(args.fields)
-        rows = list_menu_items(client, menu=args.menu)
+        menu = resolve_menu_arg(args.menu, args.menu_flag)
+        rows = list_menu_items(client, menu=menu)
         return _format_list_output(rows, fields, args)
     except ValueError as e:
         print(f"Error: {e}")
@@ -1155,10 +1157,11 @@ def _do_menu_item_list(args):  # pragma: no cover
 def _do_menu_item_add(args):  # pragma: no cover
     """Add an item to a nav menu."""
     try:
+        menu = resolve_menu_arg(args.menu, args.menu_flag, required=True)
         client = WPApiClient.from_config(site_name=args.site, debug=args.debug)
         result = create_menu_item(
             client,
-            args.menu,
+            menu,
             title=args.title,
             url=args.url,
             object_type=args.object,
@@ -2368,18 +2371,46 @@ def main(argv=None):
     menu_item_parser = menu_subparsers.add_parser("item", help="Menu item commands")
     menu_item_subparsers = menu_item_parser.add_subparsers(dest="menu_item_command")
 
-    # wpa menu item list --menu <id>
+    # The menu can be named positionally or with --menu on both `list` and
+    # `add` (#82). The positional is the wp-cli shape; the two are merged by
+    # resolve_menu_arg().
+
+    # wpa menu item list [<menu-id>]
     item_list_parser = menu_item_subparsers.add_parser(
         "list", parents=[shared, list_p], help="List menu items"
     )
-    item_list_parser.add_argument("--menu", type=int, help="Filter to one menu's items")
+    item_list_parser.add_argument(
+        "menu",
+        nargs="?",
+        type=int,
+        help="Menu ID: list only this menu's items (default: all menus)",
+    )
+    item_list_parser.add_argument(
+        "--menu",
+        dest="menu_flag",
+        type=int,
+        metavar="MENU",
+        help="Same as the positional menu ID",
+    )
     item_list_parser.set_defaults(func=_do_menu_item_list)
 
     # wpa menu item add <menu-id>
     item_add_parser = menu_item_subparsers.add_parser(
         "add", parents=[shared], help="Add an item to a menu"
     )
-    item_add_parser.add_argument("menu", type=int, help="Menu ID to add to")
+    item_add_parser.add_argument(
+        "menu",
+        nargs="?",
+        type=int,
+        help="Menu ID to add to (required, here or via --menu)",
+    )
+    item_add_parser.add_argument(
+        "--menu",
+        dest="menu_flag",
+        type=int,
+        metavar="MENU",
+        help="Same as the positional menu ID",
+    )
     item_add_parser.add_argument(
         "--title", help="Link text (required for custom links)"
     )

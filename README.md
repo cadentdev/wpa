@@ -236,8 +236,12 @@ wpa menu create --site mysite --name "Primary" --description "Main navigation"
 wpa menu delete 3 --site mysite    # always permanent; deletes its items too
 
 # Menu items — custom links need --title and --url
-wpa menu item list --site mysite --menu 3
+wpa menu item list 3 --site mysite
 wpa menu item add 3 --site mysite --title "Docs" --url "https://example.com/docs"
+
+# The menu ID can be given positionally (as above) or as --menu, on both commands
+wpa menu item list --site mysite --menu 3
+wpa menu item add --menu 3 --site mysite --title "Docs" --url "https://example.com/docs"
 
 # Menu items — object links point at existing content
 wpa menu item add 3 --site mysite --object page --object-id 12
