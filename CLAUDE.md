@@ -89,17 +89,18 @@ Every release follows this arc. Steps 1–3 are planning, 4–6 repeat per PR, 7
    blind until its base merges. Size gate: if a release exceeds ~4 PRs that touch the request path,
    credentials, or input validation, consider splitting it into two releases — audit quality
    dilutes with diff size, and security-sensitive work deserves undivided audit attention. Small
-   fixes outside those areas do not count toward the gate. Get the plan approved before implementation starts.
+   fixes outside those areas do not count toward the gate. Get the plan approved before
+   implementation starts.
 4. **TDD loop (per PR)** — write failing tests for the new behavior first, implement until GREEN,
    refactor. Coverage stays ≥98%; only thin CLI adapter functions may use `# pragma: no cover`.
-5. **CI green (per PR)** — full matrix passes, including ruff, bandit, and pip-audit. Once every PR
-   for the release is open, also check the combined state before the first merge: merge all the
-   release's branches into a scratch copy of `main` and run lint, bandit, and the full suite there.
-   PRs that are each green can still conflict or break together; fix what this finds on the
-   branches, not at merge time. Timing notes:
+5. **CI green (per PR)** — full matrix passes, including ruff, bandit, and pip-audit. Timing notes:
    `gh pr checks <n> --watch` reports "no checks" if run within seconds of PR creation — wait ~30s
    first. Stacked PRs (base ≠ main) get no CI runs at all until rebased onto main after their base
    merges; ci.yml only triggers on PRs targeting main.
+   **Combined-state check** — once every PR for the release is open, and before the first merge,
+   merge all the release's branches into a scratch copy of `main` and run lint, bandit, and the
+   full suite there. PRs that are each green can still conflict or break together; fix what this
+   finds on the branches, not at merge time.
 6. **Merge (per PR)** — merge-commit strategy (not squash). Surface discovered smells as new issues
    rather than widening the PR.
 7. **Security audit** — human review of the full release diff (not just tool output), through three
@@ -111,7 +112,8 @@ Every release follows this arc. Steps 1–3 are planning, 4–6 repeat per PR, 7
    touches the request path and a staging site is available, also run
    `examples/bootstrap-site.sh` against it as a live smoke test.
 9. **Docs** — update README, wpa-prd.md (Current release, §6.1 implemented commands, roadmap),
-   CLAUDE.md (architecture notes for new modules/commands), then RELEASE-NOTES.md last, when scope is final.
+   CLAUDE.md (architecture notes for new modules and commands), then RELEASE-NOTES.md last, when
+   scope is final.
 10. **Version bump** — `wpa/__init__.py` (single source; `pyproject.toml` reads it dynamically).
 11. **Ship** — merge the release PR, tag the merge commit `vX.Y.Z`, create the GitHub Release
     (title `vX.Y.Z — Short Name`, body = that version's RELEASE-NOTES.md section). Trusted
