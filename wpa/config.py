@@ -96,7 +96,8 @@ def create_site_config(site_name=None):
         if site_url.startswith("http://") and is_private_url(site_url):
             print(
                 "Warning: Using HTTP on a private/LAN address."
-                " Credentials are not encrypted in transit."
+                " Credentials are not encrypted in transit.",
+                file=sys.stderr,
             )
             break
         print(
@@ -257,7 +258,8 @@ def _load_env(env_path):
         if site_url.startswith("http://") and is_private_url(site_url):
             print(
                 "Warning: Using HTTP on a private/LAN address."
-                " Credentials are not encrypted in transit."
+                " Credentials are not encrypted in transit.",
+                file=sys.stderr,
             )
         else:
             print(

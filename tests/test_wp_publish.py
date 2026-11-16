@@ -913,7 +913,8 @@ class TestLoadEnvPrivateHttp:
         monkeypatch.delenv("WP_ADMIN_PATH", raising=False)
 
         _load_env(env)
-        output = capsys.readouterr().out
+        # Diagnostics go to stderr so stdout stays machine-readable (#81)
+        output = capsys.readouterr().err
         assert "Warning" in output
         assert "not encrypted" in output.lower() or "HTTP" in output
 
