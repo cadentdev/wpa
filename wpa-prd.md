@@ -402,6 +402,7 @@ Based on the REST API mapping matrix, the following command groups are implement
 | `--ids` | Output only resource IDs (one per line) |
 | `--count` | Output only the count of results |
 | `--field <f>` | Output a single field per result |
+| `--raw` | On `get` commands: print the full, unflattened API response as JSON (v0.12.0; overrides `--format`) |
 | `--debug` | Show HTTP request/response details for troubleshooting |
 | `--version` | Display WPA version |
 | `--help` | Show help for any command or subcommand |

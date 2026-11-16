@@ -82,11 +82,15 @@ def list_taxonomies(client):
     ]
 
 
-def get_taxonomy(client, slug):
-    """Get a single registered taxonomy by slug (e.g. 'category')."""
+def get_taxonomy(client, slug, raw=False):
+    """Get a single registered taxonomy by slug (e.g. 'category').
+
+    With raw=True, returns the unflattened API response instead of the
+    friendly-field row.
+    """
     try:
         endpoint = build_endpoint("taxonomies", slug)
     except ValueError:
         raise ValueError(f"Invalid taxonomy slug: {slug!r}") from None
     data = client.get(endpoint, params={"context": "edit"})
-    return _extract_taxonomy_row(data)
+    return data if raw else _extract_taxonomy_row(data)

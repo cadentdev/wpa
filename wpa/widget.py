@@ -108,11 +108,15 @@ def list_widgets(client, sidebar=None):
     return [_extract_widget_row(w) for w in data]
 
 
-def get_widget(client, widget_id):
-    """Get a single widget by ID (e.g. 'recent-posts-3')."""
+def get_widget(client, widget_id, raw=False):
+    """Get a single widget by ID (e.g. 'recent-posts-3').
+
+    With raw=True, returns the unflattened API response instead of the
+    friendly-field row.
+    """
     endpoint = _widget_endpoint(widget_id)
     data = client.get(endpoint, params={"context": "edit"})
-    return _extract_widget_row(data)
+    return data if raw else _extract_widget_row(data)
 
 
 def update_widget(client, widget_id, sidebar=None, instance_json=None):

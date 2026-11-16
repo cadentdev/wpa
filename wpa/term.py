@@ -154,21 +154,24 @@ def list_terms(
     return [_extract_term_row(t) for t in client.get_list(endpoint, params=params)]
 
 
-def get_term(client, term_id, taxonomy=None):
+def get_term(client, term_id, taxonomy=None, raw=False):
     """Get a single term by ID.
 
     Args:
         client: WPApiClient instance.
         term_id: Term ID.
         taxonomy: Taxonomy slug (default: 'category').
+        raw: Return the unflattened API response instead of the
+            friendly-field row.
 
     Returns:
-        Term dict with friendly field names.
+        Term dict with friendly field names,
+        or the raw API response dict when raw is True.
     """
     _validate_term_id(term_id)
     endpoint = _resolve_endpoint(taxonomy)
     data = client.get(build_endpoint(endpoint, term_id), params=None)
-    return _extract_term_row(data)
+    return data if raw else _extract_term_row(data)
 
 
 def create_term(

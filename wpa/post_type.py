@@ -81,11 +81,15 @@ def list_post_types(client):
     ]
 
 
-def get_post_type(client, slug):
-    """Get a single registered post type by slug (e.g. 'post')."""
+def get_post_type(client, slug, raw=False):
+    """Get a single registered post type by slug (e.g. 'post').
+
+    With raw=True, returns the unflattened API response instead of the
+    friendly-field row.
+    """
     try:
         endpoint = build_endpoint("types", slug)
     except ValueError:
         raise ValueError(f"Invalid post type slug: {slug!r}") from None
     data = client.get(endpoint, params={"context": "edit"})
-    return _extract_post_type_row(data)
+    return data if raw else _extract_post_type_row(data)

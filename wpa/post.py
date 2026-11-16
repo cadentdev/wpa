@@ -144,23 +144,26 @@ def list_posts(
     return [_extract_post_row(p) for p in client.get_list("posts", params=params)]
 
 
-def get_post(client, post_id, embed=False):
+def get_post(client, post_id, embed=False, raw=False):
     """Get a single post by ID.
 
     Args:
         client: WPApiClient instance.
         post_id: Post ID.
         embed: Include linked resources (_embed parameter).
+        raw: Return the unflattened API response instead of the
+            friendly-field row.
 
     Returns:
-        Post dict with friendly field names.
+        Post dict with friendly field names,
+        or the raw API response dict when raw is True.
     """
     _validate_post_id(post_id)
     params = {"context": "edit"}
     if embed:
         params["_embed"] = True
     data = client.get(build_endpoint("posts", post_id), params=params)
-    return _extract_post_row(data)
+    return data if raw else _extract_post_row(data)
 
 
 def create_post(

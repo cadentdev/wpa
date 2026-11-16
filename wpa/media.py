@@ -132,20 +132,23 @@ def list_media(
     return [_extract_media_row(m) for m in client.get_list("media", params=params)]
 
 
-def get_media(client, media_id):
+def get_media(client, media_id, raw=False):
     """Get a single media item by ID.
 
     Args:
         client: WPApiClient instance.
         media_id: Media ID.
+        raw: Return the unflattened API response instead of the
+            friendly-field row.
 
     Returns:
-        Media dict with friendly field names.
+        Media dict with friendly field names,
+        or the raw API response dict when raw is True.
     """
     _validate_media_id(media_id)
     params = {"context": "edit"}
     data = client.get(build_endpoint("media", media_id), params=params)
-    return _extract_media_row(data)
+    return data if raw else _extract_media_row(data)
 
 
 def import_media(
