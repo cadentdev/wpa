@@ -970,9 +970,9 @@ echo
 # theme-declared, so `menu location list` legitimately returns nothing under a
 # block theme. Empty there is a PASS, not a failure.
 #
-# ⚠️ ARGUMENT SHAPE DIFFERS BETWEEN THE TWO: `menu item add` takes the menu as a
-# POSITIONAL, `menu item list` takes it as `--menu`. Not a bug, but easy to trip
-# over — see the note filed against the repo.
+# MENU ID SHAPE: since v0.12.0 both `menu item add` and `menu item list` take the
+# menu either as a POSITIONAL or as `--menu` (#82). This section deliberately uses
+# the positional for `add` and the flag for `list` so a smoke run covers both.
 
 echo "=== 10. Nav menus ==="
 echo
@@ -988,7 +988,7 @@ echo "Fetching the menu back..."
 wpa menu get "${MENU_ID}" --site "${SITE}"
 echo
 
-echo "Adding a custom link item (menu ID is POSITIONAL here)..."
+echo "Adding a custom link item (menu ID as a positional)..."
 wpa menu item add "${MENU_ID}" \
     --title "${PREFIX}: External" \
     --url "https://example.com/${PREFIX}" \
@@ -1003,7 +1003,7 @@ wpa menu item add "${MENU_ID}" \
     --site "${SITE}"
 echo
 
-echo "Listing the menu's items (menu ID is a FLAG here)..."
+echo "Listing the menu's items (menu ID as --menu)..."
 wpa menu item list --menu "${MENU_ID}" --site "${SITE}"
 echo
 
