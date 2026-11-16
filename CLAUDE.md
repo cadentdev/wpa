@@ -71,7 +71,7 @@ CI runs on ubuntu/macos/windows across Python 3.10, 3.11, 3.12, 3.13, plus a wee
 - Default status for content creation is always `draft`
 - HTTPS enforced for public addresses; HTTP allowed only for private/LAN
 - Security audits: `bandit` (static analysis) and `pip-audit` (dependency vulnerabilities) run in CI on every PR
-- Agent sessions (local or cloud): `.claude/settings.json` denies merging PRs, publishing releases, running workflows, force pushes, pushes to `main` or tags, and reading `.env`. Merges and releases are human steps. A Stop hook (`.claude/hooks/check-before-stop.sh`) runs ruff, the format check, and the full suite with the 98% coverage floor before a session ends
+- Agent sessions (local or cloud): `.claude/settings.json` denies publishing releases, running workflows (via `gh` or the GitHub MCP tools), admin-override merges, force pushes, pushes to `main` or tags, and reading `.env`. An agent may merge a feature PR only under the conditions in Release Workflow step 6; the release PR, tags, and releases are human steps. A Stop hook (`.claude/hooks/check-before-stop.sh`) runs ruff, the format check, and the full suite with the 98% coverage floor before a session ends
 
 ## Release Workflow
 
@@ -101,7 +101,21 @@ Every release follows this arc. Steps 1–3 are planning, 4–6 repeat per PR, 7
    first. Stacked PRs (base ≠ main) get no CI runs at all until rebased onto main after their base
    merges; ci.yml only triggers on PRs targeting main.
 6. **Merge (per PR)** — merge-commit strategy (not squash). Surface discovered smells as new issues
-   rather than widening the PR.
+   rather than widening the PR. An agent session may merge a PR itself when every condition below
+   holds; if one does not, it stops and says which:
+   - the PR closes an issue attached to the release milestone (a human selected that scope in
+     step 2), and it is not the release PR (step 11);
+   - the branch is up to date with `main` and the **full** CI matrix is green on that head commit —
+     all six jobs, not only the required check;
+   - there are no unresolved review threads and no requested changes;
+   - the diff does not touch `.github/workflows/`, `.claude/`, `CLAUDE.md`, or `pyproject.toml`.
+     Changes to CI, agent guardrails, this workflow, or dependencies need a human merge.
+
+   Merge one PR at a time: merge, update the next branch from `main`, wait for CI on the new head,
+   then merge that one. Two PRs can each be green alone and still break together, so a green run
+   from before the last merge does not count. Stop at the first red check or merge conflict and
+   report it. Never bypass branch protection, skip or weaken a test, or re-run CI to get green.
+   Enabling GitHub auto-merge on a PR is equivalent, provided the same conditions hold.
 7. **Security audit** — human review of the full release diff (not just tool output), through three
    lenses: (a) round-trip symmetry — everything writable must be readable (a `get` that hides what
    `update` replaces is a bug); (b) input-type validation wherever user-supplied data crosses a
@@ -113,7 +127,7 @@ Every release follows this arc. Steps 1–3 are planning, 4–6 repeat per PR, 7
 9. **Docs** — update README, wpa-prd.md (Current release, §6.1 implemented commands, roadmap),
    CLAUDE.md (test count), then RELEASE-NOTES.md last, when scope is final.
 10. **Version bump** — `wpa/__init__.py` (single source; `pyproject.toml` reads it dynamically).
-11. **Ship** — merge the release PR, tag the merge commit `vX.Y.Z`, create the GitHub Release
+11. **Ship (human only)** — merge the release PR, tag the merge commit `vX.Y.Z`, create the GitHub Release
     (title `vX.Y.Z — Short Name`, body = that version's RELEASE-NOTES.md section). Trusted
     publishing pushes to PyPI automatically.
 12. **Verify & retro** — `pip install --upgrade wpa` in a clean venv, check `wpa --version` and
