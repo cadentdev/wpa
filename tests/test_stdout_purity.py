@@ -13,7 +13,7 @@ from unittest.mock import MagicMock, patch
 import pytest
 
 from wpa.cli import main
-from wpa.config import _load_env, create_site_config
+from wpa.config import _load_env, create_site_config, resolve_config
 
 WARNING = "Warning: Using HTTP on a private/LAN address."
 
@@ -120,3 +120,51 @@ class TestMachineReadableStdout:
         )
         assert code == 0
         assert captured.out.splitlines()[0].startswith("stylesheet,")
+
+
+@pytest.fixture()
+def only_site(tmp_path, monkeypatch):
+    """Exactly one configured site (HTTPS), so --site can be omitted."""
+    config_home = tmp_path / "config"
+    site_dir = config_home / "wpa" / "only"
+    site_dir.mkdir(parents=True)
+    (site_dir / ".env").write_text(
+        "WP_SITE_URL=https://only.example.com\nWP_USER=testuser\nWP_APP_PASSWORD=testpass\n"
+    )
+    monkeypatch.setenv("XDG_CONFIG_HOME", str(config_home))
+    for var in ("WP_SITE_URL", "WP_USER", "WP_APP_PASSWORD", "WP_ADMIN_PATH"):
+        monkeypatch.delenv(var, raising=False)
+    return config_home
+
+
+class TestUsingSiteNoticeStream:
+    """#91 — the auto-selected-site notice is a diagnostic, not data."""
+
+    NOTICE = "Using site: only"
+
+    def test_notice_goes_to_stderr(self, only_site, capsys):
+        resolve_config()
+        captured = capsys.readouterr()
+        assert self.NOTICE in captured.err
+        assert captured.out == ""
+
+    def _run(self, argv, capsys):
+        with patch("wpa.api.requests.request", return_value=_response(SAMPLE_THEMES)):
+            code = main(argv)
+        return code, capsys.readouterr()
+
+    def test_format_json_without_site_flag_is_valid_json(self, only_site, capsys):
+        code, captured = self._run(["theme", "list", "--format", "json"], capsys)
+        assert code == 0
+        assert json.loads(captured.out)[0]["stylesheet"] == "twentytwentyfive"
+        assert self.NOTICE in captured.err
+
+    def test_field_without_site_flag_is_only_the_value(self, only_site, capsys):
+        code, captured = self._run(["theme", "list", "--field", "stylesheet"], capsys)
+        assert code == 0
+        assert captured.out == "twentytwentyfive\n"
+
+    def test_count_without_site_flag_is_only_the_number(self, only_site, capsys):
+        code, captured = self._run(["theme", "list", "--count"], capsys)
+        assert code == 0
+        assert captured.out == "1\n"
