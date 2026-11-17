@@ -141,7 +141,7 @@ command -v wpa >/dev/null 2>&1 || {
 #
 # Run from a checkout with the venv first on PATH:
 #   PATH="$PWD/.venv/bin:$PATH" ./examples/bootstrap-site.sh --site ct118 --prefix p
-REQUIRED_WPA_VERSION="0.11.0"
+REQUIRED_WPA_VERSION="0.12.0"
 ACTUAL_WPA_VERSION="$(wpa --version 2>&1 | grep -oE '[0-9]+\.[0-9]+\.[0-9]+' | head -n1 || true)"
 if [[ "${ACTUAL_WPA_VERSION}" != "${REQUIRED_WPA_VERSION}" ]]; then
     echo "Error: this script targets the wpa ${REQUIRED_WPA_VERSION} command surface," >&2
