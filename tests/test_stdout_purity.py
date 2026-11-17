@@ -44,14 +44,14 @@ def lan_site(tmp_path, monkeypatch):
     return env
 
 
-def _response(payload):
+def _response(payload, base="http://192.168.52.18"):
     """Build a stand-in for a successful requests.Response."""
     body = json.dumps(payload).encode()
     response = MagicMock()
     response.ok = True
     response.status_code = 200
     response.content = body
-    response.url = "http://192.168.52.18/wp-json/wp/v2/themes"
+    response.url = f"{base}/wp-json/wp/v2/themes"
     response.headers = {}
     response.json.return_value = payload
     return response
@@ -149,7 +149,8 @@ class TestUsingSiteNoticeStream:
         assert captured.out == ""
 
     def _run(self, argv, capsys):
-        with patch("wpa.api.requests.request", return_value=_response(SAMPLE_THEMES)):
+        response = _response(SAMPLE_THEMES, base="https://only.example.com")
+        with patch("wpa.api.requests.request", return_value=response):
             code = main(argv)
         return code, capsys.readouterr()
 
