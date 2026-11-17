@@ -550,7 +550,8 @@ class TestResolveConfig:
 
         site_url, _user, _password, _admin_path = resolve_config()
         assert site_url == "https://demo.example.com"
-        output = capsys.readouterr().out
+        # Diagnostics go to stderr so stdout stays machine-readable (#91)
+        output = capsys.readouterr().err
         assert "Using site: demo" in output
 
     def test_multiple_sites_prompt_select(self, multi_site, monkeypatch):
