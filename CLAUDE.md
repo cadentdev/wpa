@@ -35,11 +35,11 @@ CI runs on ubuntu/macos/windows across Python 3.10, 3.11, 3.12, 3.13, plus a wee
 **Entry point**: `wpa/cli.py` — argparse-based CLI with subcommands (`publish`, `post list/get/create/update/delete`, `page list/get/create/update/delete`, `site add/list`, `user list/get/create/update/delete/set-role`, `media list/get/import/delete`, `comment list/get/create/update/delete/approve/unapprove/spam/unspam/trash/count`, `term list/get/create/update/delete` plus `category`/`tag` aliases, `plugin list/get/activate/deactivate`, `menu list/get/create/delete` with `item` and `location` sub-groups, `widget list/get/update/deactivate/delete`, `option list/get/update`, `sidebar list`, `taxonomy list/get`, `post-type list/get`, `block list/get`, `theme list/get`, `api discover`).
 
 **Modules**:
-- `cli.py` — Command parsing, dispatches to other modules
+- `cli.py` — Command parsing, dispatches to other modules. Leaf commands bind a handler via `set_defaults(func=...)`; a bare group (`wpa plugin`, `wpa menu item`) has none, and `main()` prints that group's help via `_group_parser()` — new groups need no guard. Every `get` parser takes the `_get_parser()` parent (`--raw`) and renders through `_format_get_output()`
 - `api.py` — Shared REST client (`WPApiClient`). All HTTP requests go through this module — only module that imports `requests`
 - `config.py` — Site credential management using XDG_CONFIG_HOME (`~/.config/wpa/<site>/.env`). Enforces HTTPS for public IPs, allows HTTP for private networks and local TLDs (`.lan`, `.local`, `.test`, `.internal`)
 - `exceptions.py` — Custom exceptions (`WPApiError`, `WPConnectionError`, `WPTimeoutError`) replacing `sys.exit(1)` pattern
-- `post.py` — Post CRUD operations against `/wp-json/wp/v2/posts`. Supports filtering by status, author, category, tag, search
+- `post.py` — Post CRUD operations against `/wp-json/wp/v2/posts`. Supports filtering by status, author, category, tag, search. `read_stdin_content()` backs `post create --stdin` (HTML from stdin; empty input rejected)
 - `page.py` — Page CRUD operations against `/wp-json/wp/v2/pages`. Supports filtering by status, search, parent
 - `publish.py` — Parses YAML frontmatter from markdown files, converts to HTML, creates pages via `WPApiClient`. Default status is `draft`
 - `user.py` — User CRUD operations against `/wp-json/wp/v2/users`. Uses `WPApiClient` for all requests. Supports `list`, `get`, `create`, `update`, `delete`, and `set-role` (shortcut for changing a user's role)
@@ -47,7 +47,7 @@ CI runs on ubuntu/macos/windows across Python 3.10, 3.11, 3.12, 3.13, plus a wee
 - `comment.py` — Comment CRUD and moderation against `/wp-json/wp/v2/comments`. Supports `list` (filter by post, status, parent, author email, search), `get`, `create`, `update`, `delete` (trash-aware, `--force` to permanently delete), plus moderation shortcuts `approve`, `unapprove`, `spam`, `unspam`, `trash`, and `count` (per-status totals via the `X-WP-Total` header)
 - `term.py` — Taxonomy term CRUD against `/wp-json/wp/v2/{categories,tags,<custom>}`. One module handles built-in taxonomies (`category` → `categories`, `post_tag` → `tags`) and custom taxonomies (passed through by slug). The CLI exposes `wpa term --taxonomy <slug>` plus thin `wpa category` / `wpa tag` aliases that pre-set the taxonomy. Term `delete` is always permanent (the REST API does not support trashing terms).
 - `plugin.py` — Plugin management against `/wp-json/wp/v2/plugins`. `list` (`--status`/`--search`; the collection is not paginated), `get`, `activate`, `deactivate`. Identifiers accept `folder/file`, `folder/file.php`, or bare slugs; segments validated via `build_endpoint`. Install/delete deliberately unimplemented (#41 follow-ups)
-- `menu.py` — Nav menu management against `/wp-json/wp/v2/{menus,menu-items,menu-locations}` (classic menus). Menu CRUD (delete force-only), item CRUD (`add` infers `custom`/`post_type`/`taxonomy` type from flags), read-only location listing. Menu items publish immediately (structure, not content)
+- `menu.py` — Nav menu management against `/wp-json/wp/v2/{menus,menu-items,menu-locations}` (classic menus). Menu CRUD (delete force-only), item CRUD (`add` infers `custom`/`post_type`/`taxonomy` type from flags), read-only location listing. Menu items publish immediately (structure, not content). `resolve_menu_arg()` merges the positional menu ID and `--menu` for `item list`/`item add`
 - `widget.py` — Classic widget management against `/wp-json/wp/v2/widgets`. `list`/`get` (status synthesized from sidebar; `get` flattens instance settings), `update` (move and/or `--instance-json`), `deactivate` (move to `wp_inactive_widgets`), `delete` (default parks inactive, `--force` removes). No `widget add` — per-type instance schemas
 - `option.py` — Registered-settings management against `/wp-json/wp/v2/settings` (single object, not a collection). `list`/`get`/`update` with JSON-typed value parsing; existence-checked before writes so unknown names get the `show_in_rest` explanation
 - `sidebar.py` — Read-only sidebar listing against `/wp-json/wp/v2/sidebars`
@@ -57,7 +57,9 @@ CI runs on ubuntu/macos/windows across Python 3.10, 3.11, 3.12, 3.13, plus a wee
 - `discover.py` — REST surface discovery via the `/wp-json/` root index (`api discover`). Uses `WPApiClient.get_root()` — the one fixed-URL request outside the wp/v2 prefix, still flowing through `_request()` so all client guards apply; `_fields` narrowing keeps responses small
 - `formatter.py` — Shared output formatting (table, json, csv, tsv) with column selection via `--fields`, plus `--ids`, `--count`, `--field` output modifiers
 
-**Global flags**: `--debug` (HTTP request/response details) available on all commands. `--site` selects a named site config.
+**Global flags**: `--debug` (HTTP request/response details) available on all commands. `--site` selects a named site config. `--raw` on every `get` command prints the unflattened API response as JSON (each module's `get_x(..., raw=True)`).
+
+**Output streams**: stdout carries data only. Diagnostics (`--debug`, the HTTP-on-LAN warning, the `Using site:` notice) go to stderr so machine-readable output stays parseable. `Error:` messages still go to stdout (#94).
 
 **Tests**: All in `tests/`, use `unittest.mock` to mock HTTP requests. No live WordPress connection needed.
 

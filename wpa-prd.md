@@ -1,10 +1,10 @@
 # WPA — Product Requirements Document
 
 **Product:** WPA (WordPress Automation)
-**Version:** PRD v1.5
-**Date:** 2026-08-10
+**Version:** PRD v1.6
+**Date:** 2026-11-17
 **Author:** Neil Johnson, Cadent Creative
-**Current release:** v0.11.0
+**Current release:** v0.12.0
 **Repository:** [github.com/cadentdev/wpa](https://github.com/cadentdev/wpa)
 **PyPI:** [pypi.org/project/wpa](https://pypi.org/project/wpa/)
 **License:** MIT
@@ -238,7 +238,7 @@ These are the quality bars every release meets (folded in from the retired devel
 
 ## 6. Command structure
 
-### 6.1 Implemented commands (v0.11.0)
+### 6.1 Implemented commands (v0.12.0)
 
 **Content publishing**
 
@@ -507,7 +507,20 @@ Shipped in v0.8.0 (2026-04-15). See `RELEASE-NOTES.md` for full notes including 
 | `wpa theme list/get` | Shipped v0.11.0 (read-only; REST API exposes no activation/install) |
 | `wpa user application-password` | Deferred to its own release (#74) — credential-bearing work gets a small, sharply-audited release per the workflow size gate |
 
-### Phase 7.5: Application passwords (v0.12.0)
+### Phase 7.25: CLI polish (v0.12.0) — COMPLETE
+
+**Shipped:** v0.12.0. A scripting-reliability release built from the v0.11.0 audit and smoke-test findings; no new command groups.
+
+| Deliverable | Details |
+|---|---|
+| Diagnostics off stdout | Shipped v0.12.0 — the HTTP-on-LAN warning (#81) and the `Using site:` notice (#91) go to stderr, so `--format json/csv/tsv`, `--field`, `--ids`, `--count` are clean |
+| `--raw` on every `get` command | Shipped v0.12.0 (#79) — the full, unflattened API response as JSON |
+| Bare group commands print help | Shipped v0.12.0 (#75) — one generic dispatch replaces the per-group guard list |
+| `menu item list/add` argument shape | Shipped v0.12.0 (#82) — menu ID positional (wp-cli shape) or `--menu` on both |
+| `post create --stdin` | Shipped v0.12.0 (#57) — HTML content from standard input |
+| Follow-ups | #92, #94, #95, #98 — remaining stdout/stdin hygiene, unscheduled |
+
+### Phase 7.5: Application passwords (v0.13.0)
 
 | Deliverable | Details |
 |---|---|

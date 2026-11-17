@@ -1,5 +1,126 @@
 # Release Notes
 
+## v0.12.0 — CLI Polish: Scriptable Output, `--raw`, and stdin (2026-11-17)
+
+A scripting-reliability release. No new command groups: every change here
+came out of the v0.11.0 release audit or its live smoke test, and each one
+makes `wpa` behave better when another program — a shell pipeline, a CI
+job, an agent — is on the other end.
+
+On PyPI as [wpa 0.12.0](https://pypi.org/project/wpa/0.12.0/) —
+`pip install --upgrade wpa`.
+
+### Machine-readable output is clean (#81, #91)
+
+```bash
+wpa theme list --format json | jq '.[0].stylesheet'   # works on LAN/HTTP sites now
+ID=$(wpa post list --status draft --ids)              # and with --site omitted
+```
+
+Two diagnostics were being printed to **stdout**, ahead of the payload:
+the `Warning: Using HTTP on a private/LAN address…` line on `http://`
+sites, and the `Using site: <name>` notice when exactly one site is
+configured and `--site` is omitted. Either one made `--format json`
+invalid JSON and put a stray first line in `--field`, `--ids`, `--count`,
+and CSV/TSV output. Both now go to stderr: still visible to an operator,
+out of the data.
+
+### `--raw` on every `get` command (#79)
+
+```bash
+wpa block get core/paragraph --raw | jq '.attributes'
+wpa taxonomy get category --raw | jq '.capabilities'
+wpa post get 42 --embed --raw
+```
+
+`get` commands print a friendly subset of fields, including with
+`--format json`. `--raw` prints the complete, unflattened API response as
+JSON instead — block `attributes`/`supports`, taxonomy
+`labels`/`capabilities`, post-type `supports`, a widget's full instance.
+It is available on all 14 `get` commands (and the `category`/`tag`
+aliases), sends the same request, and overrides `--format`. On
+`option get`, whose value is never flattened, it equals `--format json`.
+Output without `--raw` is unchanged.
+
+### Bare group commands print help (#75)
+
+```bash
+wpa plugin          # was: AttributeError traceback
+wpa menu item       # now: that group's own usage
+```
+
+`wpa plugin`, `menu`, `widget`, `option`, and `sidebar` — and the nested
+`menu item` / `menu location` — crashed when run without a subcommand.
+The per-group guard list in `main()` is replaced by one generic dispatch
+that prints the help of the deepest group named, so groups added later
+are covered automatically.
+
+### `menu item list` / `menu item add` agree on the menu argument (#82)
+
+```bash
+wpa menu item list 3
+wpa menu item add 3 --title "Docs" --url "https://example.com/docs"
+wpa menu item list --menu 3            # still works
+wpa menu item add --menu 3 --title …   # now works too
+```
+
+`add` took the menu only as a positional and `list` only as `--menu`.
+Both accept either form; the positional matches wp-cli and the rest of
+the CLI. Giving both with different values is an error rather than a
+silent pick.
+
+### `post create --stdin` (#57)
+
+```bash
+generate-html | wpa post create --site mysite --title "My Post" --stdin
+```
+
+A third content source alongside `--content` and `--file` (the three are
+mutually exclusive). Content is HTML and is sent as received. Empty input
+is an error and creates nothing — in a pipeline it almost always means
+the upstream command failed. Pass `--site`: stdin carries the content, so
+it cannot also answer a site-selection prompt, and the command says so
+instead of consuming the content as an answer.
+
+### Behaviour changes
+
+Nothing is removed and no default changes, but scripts may notice:
+
+- The HTTP-on-LAN warning and the `Using site:` notice are on stderr, not
+  stdout. Anything that stripped or matched those lines in captured
+  stdout no longer finds them there.
+- `wpa menu item add` with no menu ID exits **1** with a wpa error naming
+  both forms; it used to exit 2 with an argparse usage error.
+- `post create --file X --content Y` reports
+  `--content, --file and --stdin are mutually exclusive; choose one content source.`
+  (was `--file and --content are mutually exclusive.`).
+- Bare `wpa plugin` / `menu` / `widget` / `option` / `sidebar` exit 1
+  after printing help, like the other groups, instead of crashing.
+
+### Release audit and process
+
+Found while doing this work and filed rather than folded in:
+[#92](https://github.com/cadentdev/wpa/issues/92) (`user create
+--password-stdin` loses the piped password to the site prompt),
+[#94](https://github.com/cadentdev/wpa/issues/94) (`Error:` messages go
+to stdout), [#95](https://github.com/cadentdev/wpa/issues/95) (stdin
+content for `page create`, `post update`, and `--file -`), and
+[#98](https://github.com/cadentdev/wpa/issues/98) (the interactive site
+menu and prompt go to stdout).
+
+The release workflow changed in three ways this cycle: agent sessions may
+merge a milestone PR once the full CI matrix is green on an up-to-date
+branch (the release PR, tags, and releases stay human); out-of-scope
+findings must be filed as issues before a PR opens; and all of a
+release's branches are test-merged together before the first merge,
+after two individually green PRs in this release turned out to conflict.
+
+`wpa user application-password` (#74), previously pencilled in as
+v0.12.0, moves to v0.13.0 and keeps its own small, sharply-audited
+release.
+
+892 tests, 98% coverage.
+
 ## v0.11.0 — Phase 7: Introspection and Discovery (2026-08-10)
 
 Four read-only command groups plus API surface discovery — PRD Phase 7.
