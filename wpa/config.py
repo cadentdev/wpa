@@ -215,7 +215,9 @@ def resolve_config(site_name=None):
         # Single config — use automatically
         config_dir = get_config_dir()
         env_path = config_dir / sites[0] / ".env"
-        print(f"Using site: {sites[0]}")
+        # Diagnostic, not data: keep it off stdout so --format json, --field,
+        # --ids and --count stay machine-readable when --site is omitted (#91).
+        print(f"Using site: {sites[0]}", file=sys.stderr)
         return _load_env(env_path)
 
     # Multiple configs — prompt to select
